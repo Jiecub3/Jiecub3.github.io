@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>java file协议 简析 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="java file协议 简析" />
+<meta property="og:description" content="前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-06-25T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-06-25T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="java file协议 简析"/>
+<meta name="twitter:description" content="前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "java file协议 简析",
+      "item": "https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "java file协议 简析",
+  "name": "java file协议 简析",
+  "description": "前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了",
+  "keywords": [
+    
+  ],
+  "articleBody": " 前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了。然后file:///C:想列C:下的目录时，却列出了当前路径下的文件列表感觉很神奇，就去研究研究了\nwindow 利用 \\和/不用那么较真，java有转化的\nfile:///C: 列出的是C:\\Users\\jie\\Desktop\\Java\\CVE_learn\\CVE-2022-25845-In-Spring-main的目录文件 file:///C:/ 读取C:下的目录文件 file:///C:test3 读取C:\\Users\\jie\\Desktop\\Java\\CVE_learn\\CVE-2022-25845-In-Spring-main\\test3文件内容 file:///C:../读取当前目录的上层目录 什么原因照成的捏，其实简单的\nURL解析完后，会把解析的path传入new File()初始化\n这里的path和prefixLength则是后面路径解析的关键\n这里神奇吧，为啥这些目录文件就在这File里了？，明明初始化fs调用的那两个函数也没干什么，这里通过getAbsolutePath()获取实际路径（/C:这里可以理解为抽象路径）\nFile file = new File(\"/C:\"); //这里path会解析成C: ,prefixLength为2 System.out.println(file.getAbsolutePath()); 那看看getAbsolutePath()里是怎么处理的吧，最后在下方这里返回，什么意思呢\npl就是上方的prefixLength（只要是z:xxx这种格式就会返回2，z:xx/会返回3)，getUserPath()获取当前路径，ud就是当前路径最base的路径，然后判断我们的path是不是以ud值开头的，是的话就会把当前路径和我们C:xxx后面的xxx进行拼接返回\n而这里path解析为C:所以这里返回的是当前路径，即\nfile:///C:test3 读取当前目录的test3文件\nfile:///C:../ 列出当前目录的上层目录列表\n利用条件\n但是需要当前目录以X:为开头 且file调用中的C:要和当前目录的most base目录一致 默认只能window利用 为什么捏？\n看到实际路径解析的地方，这里其实只有这3个地方会和当前目录有互动(笔者初心也是为了分析相对路径的)\n第一处后面说，第二处会优先base目录没戏，看到第三处我们当前分析的地方（起始条件是pl为2）\n分析pl即prefixLength\nthis.prefixLength = fs.prefixLength(this.path); 可以看到只有x:开头才能行的通，另一个\\\\开头不行在后续resolve()会直接return path的\n所以这里应该是只能window才能用，毕竟有长度限制，他只判定你前两位字符，本来还想Users:xxx这种在linux尝试的，no！\n然后为什么file:///C:可行，他传到new File()时是/C:，这是因为this.path = fs.normalize(pathname);对路径的转化，这里会把/转化成\\，而/C:xx会转为C:xxx\n看了下fs.normalize()逻辑只有/X:xx这种可以逃脱/的控制！，为什么要逃过/呢，因为只要是/开头resolve()里就和相对路径无缘了，而下面这些传到new File()时都是以/开头的（笔者这里想找linux下可以用的方式）\nfile:///a/../ file://~:80/../ file://localhost:80/a/../ ... linux 探索\u0026利用 即我们需要让URL解析时path不以/开头！，则分析下面这段代码，spec为我们传入的整个url，可以知道识别到path这里时如果是/开头直接g，authority（就是host）不为空的话也会g\n看到这里，file:///xxx常见使用会走这一块，会使authority从null变为\"\"。导致上图authority!=null成立，所以我们file:///这种格式也别用啦！！！\n后面发现这个authority不影响后续代码，那直接不搞他呗\nfile:./ #成功实现 后续还有个地方，var3就是path，这里的if也不能进，直接给你硬拼两个\\\\（让host为空就能避免了）\n注意这里的替换后面要考！\n继续往下，java这里会判断是否是目录，为目录会list目录列表，文件则读取内容\n这则为file协议的底层逻辑，即java file为什么能列目录\n绕过 也就围绕这些处理路径上的一些转化做文章咯，具体位置就不截图了 麻烦\n绕过file:开头\nurl:file:///xxx 总所周知的，会截取读取url:后面的内容 #在解析协议之前 path=\"\tfile:///xxx\t\" 会while循环删除首位的空白符号 #在解析协议之前 关键字符绕过\nfile:C|./ 绕过C: #在new File()之前 \\|/ 相互替代,衍生出.\\../.\\..\\../ 这个在new File()里面也有转化 url加密 ParseUtil.decode()会进行url解密 #在new File()之前 path=\" file:%2e%2f%2e%2e%2f%2e%2e%2f \" path=\" netdoc:%2e%2f%2e%2e%2f%2e%2e%2f \" netdoc平替 file 但是jdk11后删除了 url绕过\nif (spec.regionMatches(true, start, \"url:\", 0, 4)) { start += 4; } 因为这个比对会大小写都比对，所以url:可以大小写混着写Url:。然后这里toUpperCase()也存在转化问题，但是我跑了下，没找到url:这几个可以利用的字符\nfile绕过\nurl协议处理的时候也会toLowerCase()转化，所以这里file也可以大小写，但是有个巨神奇的地方。这里不是有i字符么。\nSystem.out.println(Character.toLowerCase('İ')=='i'); //true 上面这个是我之前跑过的。但是这里利用不了\n这里可以发现İ被转成了2位字符！ 然后我又去跑了下uincode字符。（想找能toLowerCase()解析成2位可用的字符)，发现只有İ是这样本身len为1 解析 后len为2\n\"İ\".toLowerCase().length() //2 总结 file:path 貌似就是这样设计的，但是在网上找利用的时候没看到有写的。那么研究这个有什么用捏，感觉鸡肋呀hhh\n也是file:///C:出乎我意外的回显，就好奇去看了看吧\n感觉绕过可能稍稍微有那么一点点用？\nfile:path这种应该是有用的（测试雷池waf个人版）这种形式都不会记录的\n之前阿里云waf会检查3个../../../这种，用上面应该也能绕过\n可是我觉得能最有用的应该是绕过..这种检查，可以二次url加密，到java代码层都是一层url加密的，而很多业务应该是直接检测..的嘿嘿\n但还是鸡肋只能应用于file协议下。并不能做到路径拼接下的..绕过\npath=\" Url:FiLe:%2e%2f%2e%2e%2f%2e%2e%2f \"\n",
+  "wordCount" : "2559",
+  "inLanguage": "zh",
+  "datePublished": "2025-06-25T20:01:23+08:00",
+  "dateModified": "2025-06-25T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      java file协议 简析
+    </h1>
+    <div class="post-meta"><span title='2025-06-25 20:01:23 +0800 CST'>2025-06-25</span>&nbsp;·&nbsp;6 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#window-%e5%88%a9%e7%94%a8" aria-label="window 利用">window 利用</a></li>
+                    <li>
+                        <a href="#linux-%e6%8e%a2%e7%b4%a2%e5%88%a9%e7%94%a8" aria-label="linux 探索&amp;amp;利用">linux 探索&amp;利用</a></li>
+                    <li>
+                        <a href="#%e7%bb%95%e8%bf%87" aria-label="绕过">绕过</a></li>
+                    <li>
+                        <a href="#%e6%80%bb%e7%bb%93" aria-label="总结">总结</a>
+                    </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>前言：起因是记得<code>file协议</code>貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了。然后<code>file:///C:</code>想列C:下的目录时，却列出了当前路径下的文件列表感觉很神奇，就去研究研究了</p>
+</blockquote>
+<h2 id="window-利用">window 利用<a hidden class="anchor" aria-hidden="true" href="#window-利用">#</a></h2>
+<p><code>\</code>和<code>/</code>不用那么较真，java有转化的</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">file:///C: 列出的是C:\Users\jie\Desktop\Java\CVE_learn\CVE-2022-25845-In-Spring-main的目录文件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">file:///C:/ 读取C:下的目录文件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">file:///C:test3 读取C:\Users\jie\Desktop\Java\CVE_learn\CVE-2022-25845-In-Spring-main\test3文件内容
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">file:///C:../读取当前目录的上层目录
+</span></span></code></pre></div><p><img loading="lazy" src="images/image-20250625102943449.png" alt="image-20250625102943449"  />
+</p>
+<p>什么原因照成的捏，其实简单的</p>
+<p><code>URL</code>解析完后，会把解析的<code>path</code>传入<code>new File()</code>初始化</p>
+<p>这里的<code>path</code>和<code>prefixLength</code>则是后面路径解析的关键</p>
+<p><img loading="lazy" src="images/image-20250625103822850.png" alt="image-20250625103822850"  />
+</p>
+<p>这里神奇吧，为啥这些目录文件就在这File里了？，明明初始化<code>fs</code>调用的那两个函数也没干什么，这里通过<code>getAbsolutePath()</code>获取<code>实际路径</code>（<code>/C:</code>这里可以理解为<code>抽象路径</code>）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">File</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">File</span><span class="p">(</span><span class="s">&#34;/C:&#34;</span><span class="p">);</span><span class="w"> </span><span class="c1">//这里path会解析成C:  ,prefixLength为2</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">file</span><span class="p">.</span><span class="na">getAbsolutePath</span><span class="p">());</span><span class="w">
+</span></span></span></code></pre></div><p>那看看<code>getAbsolutePath()</code>里是怎么处理的吧，最后在下方这里返回，什么意思呢</p>
+<p><code>pl</code>就是上方的<code>prefixLength</code>（只要是<code>z:xxx</code>这种格式就会返回<code>2</code>，<code>z:xx/</code>会返回3)，getUserPath()获取当前路径，<code>ud</code>就是当前路径<code>最base</code>的路径，然后判断我们的<code>path</code>是不是以<code>ud值开头</code>的，是的话就会把<code>当前路径</code>和我们C:xxx后面的<code>xxx</code>进行<code>拼接</code>返回</p>
+<p><img loading="lazy" src="images/image-20250625110435345.png" alt="image-20250625110435345"  />
+</p>
+<p>而这里path解析为<code>C:</code>所以这里返回的是<code>当前路径</code>，即</p>
+<ul>
+<li>
+<p>file:///C:test3 读取当前目录的test3文件</p>
+</li>
+<li>
+<p>file:///C:../   列出当前目录的<code>上层目录</code>列表</p>
+</li>
+<li>
+<p><strong>利用条件</strong></p>
+<ul>
+<li>但是需要当前目录以<code>X:</code>为开头</li>
+<li>且file调用中的<code>C:</code>要和当前目录的<code>most base</code>目录一致</li>
+<li>默认只能window利用</li>
+</ul>
+</li>
+</ul>
+<p>为什么捏？</p>
+<p>看到<code>实际路径</code>解析的地方，这里其实只有这3个地方会和<code>当前目录</code>有互动(笔者初心也是为了分析<code>相对路径</code>的)</p>
+<p>第一处后面说，第二处会优先base目录没戏，看到第三处我们当前分析的地方（起始条件是<code>pl为2</code>）</p>
+<p><img loading="lazy" src="images/image-20250625112526754.png" alt="image-20250625112526754"  />
+</p>
+<p>分析<code>pl</code>即<code>prefixLength</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">this</span><span class="p">.</span><span class="na">prefixLength</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fs</span><span class="p">.</span><span class="na">prefixLength</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">path</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250625113146787.png" alt="image-20250625113146787"  />
+</p>
+<p>可以看到只有<code>x:</code>开头才能行的通，另一个<code>\\</code>开头不行在后续resolve()会直接<code>return path</code>的</p>
+<p>所以这里应该是只能window才能用，毕竟有长度限制，他只判定你前两位字符，本来还想Users:xxx这种在linux尝试的，no！</p>
+<p>然后为什么<code>file:///C:</code>可行，他传到new File()时是<code>/C:</code>，这是因为<code>this.path = fs.normalize(pathname);</code>对路径的转化，这里会把<code>/</code>转化成<code>\</code>，而<code>/C:xx</code>会转为<code>C:xxx</code></p>
+<p><img loading="lazy" src="images/image-20250625154249984.png" alt="image-20250625154249984"  />
+</p>
+<p>看了下<code>fs.normalize()</code>逻辑只有<code>/X:xx</code>这种可以逃脱<code>/</code>的控制！，为什么要逃过<code>/</code>呢，因为只要是<code>/</code>开头<code>resolve()</code>里就和<code>相对路径</code>无缘了，而下面这些传到new File()时都是以<code>/</code>开头的（笔者这里想找linux下可以用的方式）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">file:///a/../
+</span></span><span class="line"><span class="cl">file://~:80/../
+</span></span><span class="line"><span class="cl">file://localhost:80/a/../
+</span></span><span class="line"><span class="cl">...
+</span></span></code></pre></div><h2 id="linux-探索利用">linux 探索&amp;利用<a hidden class="anchor" aria-hidden="true" href="#linux-探索利用">#</a></h2>
+<p>即我们需要让URL解析时path不以<code>/</code>开头！，则分析下面这段代码，<code>spec</code>为我们传入的整个url，可以知道识别到path这里时如果是<code>/</code>开头直接g，<code>authority</code>（就是host）不为空的话也会g</p>
+<p><img loading="lazy" src="images/image-20250625162240655.png" alt="image-20250625162240655"  />
+</p>
+<p>看到这里，<code>file:///xxx</code>常见使用会走这一块，会使<code>authority</code>从<code>null</code>变为<code>&quot;&quot;</code>。导致上图<code>authority!=null</code>成立，所以我们file:///这种格式也别用啦！！！</p>
+<p><img loading="lazy" src="images/image-20250625162659468.png" alt="image-20250625162659468"  />
+</p>
+<p>后面发现这个<code>authority</code>不影响后续代码，那直接不搞他呗</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">file:./    #成功实现
+</span></span></code></pre></div><p><img loading="lazy" src="images/image-20250625163806759.png" alt="image-20250625163806759"  />
+</p>
+<p>后续还有个地方，var3就是path，这里的if也不能进，直接给你硬拼两个<code>\\</code>（让<code>host</code>为空就能避免了）</p>
+<p>注意这里的替换后面要考！</p>
+<p><img loading="lazy" src="images/image-20250625164641668.png" alt="image-20250625164641668"  />
+</p>
+<blockquote>
+<p>继续往下，java这里会判断是否是目录，为目录会list目录列表，文件则读取内容</p>
+<p>这则为file协议的底层逻辑，即java file为什么能列目录</p>
+</blockquote>
+<p><img loading="lazy" src="images/image-20250625105959420.png" alt="image-20250625105959420"  />
+</p>
+<h2 id="绕过">绕过<a hidden class="anchor" aria-hidden="true" href="#绕过">#</a></h2>
+<blockquote>
+<p>也就围绕这些<code>处理路径</code>上的一些转化做文章咯，具体位置就不截图了 麻烦</p>
+</blockquote>
+<ul>
+<li>
+<p>绕过<code>file:</code>开头</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">url:file:///xxx         总所周知的，会截取读取url:后面的内容    #在解析协议之前
+</span></span><span class="line"><span class="cl">path=&#34;	file:///xxx	&#34;   会while循环删除首位的空白符号          #在解析协议之前
+</span></span></code></pre></div></li>
+<li>
+<p>关键字符绕过</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">file:C|./    绕过C:  							 #在new File()之前
+</span></span><span class="line"><span class="cl">\|/          相互替代,衍生出.\../.\..\../        这个在new File()里面也有转化
+</span></span><span class="line"><span class="cl">url加密     	ParseUtil.decode()会进行url解密    #在new File()之前
+</span></span><span class="line"><span class="cl">path=&#34;  file:%2e%2f%2e%2e%2f%2e%2e%2f   &#34;
+</span></span><span class="line"><span class="cl">path=&#34;  netdoc:%2e%2f%2e%2e%2f%2e%2e%2f   &#34;
+</span></span><span class="line"><span class="cl">netdoc平替 file 但是jdk11后删除了
+</span></span></code></pre></div></li>
+</ul>
+<p><strong>url绕过</strong></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">spec</span><span class="p">.</span><span class="na">regionMatches</span><span class="p">(</span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="n">start</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;url:&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">0</span><span class="p">,</span><span class="w"> </span><span class="n">4</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="n">start</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">4</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>因为这个比对会大小写都比对，所以<code>url:</code>可以大小写混着写<code>Url:</code>。然后这里<code>toUpperCase()</code>也存在转化问题，但是我跑了下，没找到<code>url:</code>这几个可以利用的字符</p>
+<p><img loading="lazy" src="images/image-20250804113036960.png" alt="image-20250804113036960"  />
+</p>
+<p><strong>file绕过</strong></p>
+<p>url协议处理的时候也会<code>toLowerCase()</code>转化，所以这里<code>file</code>也可以大小写，但是有个巨神奇的地方。这里不是有<code>i</code>字符么。</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">Character</span><span class="p">.</span><span class="na">toLowerCase</span><span class="p">(</span><span class="sc">&#39;İ&#39;</span><span class="p">)</span><span class="o">==</span><span class="sc">&#39;i&#39;</span><span class="p">);</span><span class="w">  </span><span class="c1">//true</span><span class="w">
+</span></span></span></code></pre></div><p>上面这个是我之前跑过的。但是这里<code>利用不了</code></p>
+<p><img loading="lazy" src="images/image-20250821173627843.png" alt="image-20250821173627843"  />
+</p>
+<p>这里可以发现<code>İ</code>被转成了<code>2</code>位字符！ 然后我又去跑了下uincode字符。（想找能toLowerCase()解析成2位可用的字符)，发现只有<code>İ</code>是这样本身len为1 解析 后len为2</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="s">&#34;İ&#34;</span><span class="p">.</span><span class="na">toLowerCase</span><span class="p">().</span><span class="na">length</span><span class="p">()</span><span class="w">  </span><span class="c1">//2</span><span class="w">
+</span></span></span></code></pre></div><h2 id="总结">总结<a hidden class="anchor" aria-hidden="true" href="#总结">#</a></h2>
+<blockquote>
+<p>file:path 貌似就是这样设计的，但是在网上找利用的时候没看到有写的。那么研究这个有什么用捏，感觉鸡肋呀hhh</p>
+<p>也是file:///C:出乎我意外的回显，就好奇去看了看吧</p>
+<p>感觉绕过可能稍稍微有那么一点点用？</p>
+<p>file:path这种应该是有用的（测试雷池waf个人版）这种形式都不会记录的</p>
+<p>之前阿里云waf会检查3个../../../这种，用上面应该也能绕过</p>
+<p>可是我觉得能最有用的应该是绕过<code>..</code>这种检查，可以<strong>二次url加密</strong>，到java代码层都是一层url加密的，而很多业务应该是直接检测<code>..</code>的嘿嘿</p>
+<p>但还是<code>鸡肋</code>只能应用于file协议下。并不能做到<code>路径拼接</code>下的<code>..</code>绕过</p>
+<p>path=&quot;  Url:FiLe:%2e%2f%2e%2e%2f%2e%2e%2f   &quot;</p>
+</blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>高版本jdk Spring aop链子</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>Fastjson1.2.24-1.2.80 反序列化</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

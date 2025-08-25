@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Java on Jiecub3</title>
+    <link>https://Jiecub3.github.io/zh/categories/java/</link>
+    <description>Recent content in Java on Jiecub3</description>
+    <generator>Hugo -- 0.123.8</generator>
+    <language>zh-CN</language>
+    <lastBuildDate>Thu, 17 Jul 2025 20:01:23 +0800</lastBuildDate>
+    <atom:link href="https://Jiecub3.github.io/zh/categories/java/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>高版本jdk Spring aop链子</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/</link>
+      <pubDate>Thu, 17 Jul 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/</guid>
+      <description>前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操</description>
+    </item>
+    <item>
+      <title>java file协议 简析</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/</link>
+      <pubDate>Wed, 25 Jun 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/</guid>
+      <description>前言：起因是记得file协议貌似可以相对路径的，然后想(file://,file://./)列当前目录的，发现不行，当时就以为不能相对路径了</description>
+    </item>
+    <item>
+      <title>Fastjson1.2.24-1.2.80 反序列化</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/</link>
+      <pubDate>Sun, 01 Jun 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson1.2.24-1.2.80/</guid>
+      <description>做个总结，忘了捡得快 1.2.24~1.2.47 1.2.24-1.2.47（绕过黑名单的poc 都需开启autoTypeSupport 用于返回class，关闭throw</description>
+    </item>
+    <item>
+      <title>jdk7u21&amp; 8u20 深度分析</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/jdk7u218u20-%E6%B7%B1%E5%BA%A6%E5%88%86%E6%9E%90/</link>
+      <pubDate>Sat, 10 May 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/jdk7u218u20-%E6%B7%B1%E5%BA%A6%E5%88%86%E6%9E%90/</guid>
+      <description>前言：最近缺少sink点，看看前辈们是怎么利用原生链的 然后jdk7u21对其构造细节进行了一些分析吧，自我感觉分析的挺全的了，没啥难度 jdk</description>
+    </item>
+    <item>
+      <title>Fury反序列化&amp;aliyunctf-jtool</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/</link>
+      <pubDate>Sun, 27 Apr 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/fury%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96aliyunctf-jtool/</guid>
+      <description>前言：当时看不懂这个，无意间看了下hessian反序列化，然后就有想法和思路了，然后看网上文章也是没有看到那个把这个讲明白的（也可能是我看得</description>
+    </item>
+    <item>
+      <title>Fastjson原生链</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson%E5%8E%9F%E7%94%9F%E9%93%BE/</link>
+      <pubDate>Mon, 03 Mar 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/fastjson/fastjson%E5%8E%9F%E7%94%9F%E9%93%BE/</guid>
+      <description>分为2个版本来探究 这里我们找的是原生链，及fastjson依赖下看看可反序列化的类，看有哪些可以用，这里查找只有这三个,1.2.49之后没这</description>
+    </item>
+    <item>
+      <title>JDBC综合分析</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/jdbc/</link>
+      <pubDate>Tue, 25 Feb 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/jdbc/</guid>
+      <description>0x1 Mysql 反序列化 前言：java调试这边分析完了，但是又很想了解这个mysql恶意服务是怎么搭建的，于是就再从流量层面简单分析了下mysql协议，</description>
+    </item>
+    <item>
+      <title>JNDI</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/jndi/</link>
+      <pubDate>Thu, 23 Jan 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/jndi/</guid>
+      <description>0x01 RMI client package rmi; import javax.naming.InitialContext; import javax.naming.NamingException; public class client { public static void main(String[] args) { try { Object ret = new InitialContext().lookup(&amp;#34;rmi://127.0.0.1:1099/Jie&amp;#34;); System.out.println(&amp;#34;ret: &amp;#34; + ret); } catch ( NamingException e) { e.printStackTrace(); } } } Server import com.sun.jndi.rmi.registry.ReferenceWrapper; import javax.naming.Reference; import java.rmi.registry.LocateRegistry; import java.rmi.registry.Registry; public class Server { public static void main(String args[]) { try { Registry registry = LocateRegistry.createRegistry(1099); String factoryUrl = &amp;#34;http://localhost:1098/&amp;#34;; Reference</description>
+    </item>
+    <item>
+      <title>RMI JEP290</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/rmi-jep290/</link>
+      <pubDate>Fri, 17 Jan 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/rmi-jep290/</guid>
+      <description>前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290</description>
+    </item>
+    <item>
+      <title>jdk17&amp;CC链下利用TemplatesImpl</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/</link>
+      <pubDate>Fri, 10 Jan 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/</guid>
+      <description>0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先</description>
+    </item>
+    <item>
+      <title>UTF-8 Overlong Encoding-Java反序列化</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/bypass_waf/utf-8-overlong-encoding-java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/</link>
+      <pubDate>Thu, 12 Dec 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/bypass_waf/utf-8-overlong-encoding-java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/</guid>
+      <description>0x01 前言 Java反序列化中应用 @1ue UTF-8 Overlong Encoding原理 @p牛 拜读上面两篇文章后，感觉挺有意思的，跟着1ue师傅的文章再分析了下，这里UTF-</description>
+    </item>
+    <item>
+      <title>CommonsBeanutils&amp;shiro550</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/commonsbeanutilsshiro550/</link>
+      <pubDate>Thu, 28 Nov 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/commonsbeanutilsshiro550/</guid>
+      <description>shrio 550 前言：对PropertyUtils.getProperty()中的一些流程进行调试，分析出descriptors中值怎么来，为什么是这些</description>
+    </item>
+    <item>
+      <title>Spring内存马</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/spring%E5%86%85%E5%AD%98%E9%A9%AC/</link>
+      <pubDate>Mon, 25 Nov 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/spring%E5%86%85%E5%AD%98%E9%A9%AC/</guid>
+      <description>前言: 不建议看Controller内存马，因为前面完全是笔者自己在摸索，后面还错了hh（太菜啦）。跟我这个走的话可能会费力不讨好。 Inter</description>
+    </item>
+    <item>
+      <title>jackson原生链</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/jackson%E5%8E%9F%E7%94%9F%E9%93%BE/</link>
+      <pubDate>Thu, 14 Nov 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/jackson%E5%8E%9F%E7%94%9F%E9%93%BE/</guid>
+      <description>环境 jackson版本太老的话，POJONode中代码会不对 &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;com.fasterxml.jackson.core&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;jackson-databind&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;2.15.0&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;com.fasterxml.jackson.core&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;jackson-core&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;2.15.0&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;com.fasterxml.jackson.core&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;jackson-annotations&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;2.15.0&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;javassist&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;javassist&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;3.12.1.GA&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; 0x01 writeValueAsString 这里我们jackson 原生链，利用点</description>
+    </item>
+    <item>
+      <title>Commons-Collections1-7</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/cc_chain/</link>
+      <pubDate>Mon, 11 Nov 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/cc_chain/</guid>
+      <description>前言：主要是记录自己根据利用链，然后编写poc及遇到的问题和解决，然后组合一条链子（没啥意义当练手 0x01 环境 &amp;lt;dependencies&amp;gt; &amp;lt;!-- https://mvnrepository.com/artifact/junit/junit --&amp;gt; &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;junit&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;junit&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;4.11&amp;lt;/version&amp;gt; &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt; &amp;lt;/dependency&amp;gt; &amp;lt;!-- https://mvnrepository.com/artifact/commons-collections/commons-collections --&amp;gt; &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;commons-collections&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;commons-collections&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;3.2.1&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt;</description>
+    </item>
+    <item>
+      <title>Tomcat Filter内存马</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/</link>
+      <pubDate>Fri, 01 Nov 2024 21:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/</guid>
+      <description>hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh 环境 &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;org.apache.tomcat&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;tomcat-catalina&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;9.0.96&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; 先贴poc吧，</description>
+    </item>
+    <item>
+      <title>Tomcat Listener内存马</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-listener%E5%86%85%E5%AD%98%E9%A9%AC/</link>
+      <pubDate>Fri, 01 Nov 2024 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-listener%E5%86%85%E5%AD%98%E9%A9%AC/</guid>
+      <description>环境搭建 配置好tomcat后，调试时笔者用的maven，然后下载对应源码就好了 &amp;lt;dependency&amp;gt; &amp;lt;groupId&amp;gt;org.apache.tomcat&amp;lt;/groupId&amp;gt; &amp;lt;artifactId&amp;gt;tomcat-catalina&amp;lt;/artifactId&amp;gt; &amp;lt;version&amp;gt;9.0.96&amp;lt;/version&amp;gt; &amp;lt;/dependency&amp;gt; 0x01 Listener前置知识 Java Web 开发中的监听器（Lis</description>
+    </item>
+  </channel>
+</rss>

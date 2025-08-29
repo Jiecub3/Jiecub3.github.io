@@ -6,8 +6,15 @@
     <description>Recent content in Posts on Jiecub3</description>
     <generator>Hugo -- 0.123.8</generator>
     <language>zh-CN</language>
-    <lastBuildDate>Thu, 17 Jul 2025 20:01:23 +0800</lastBuildDate>
+    <lastBuildDate>Thu, 28 Aug 2025 20:01:23 +0800</lastBuildDate>
     <atom:link href="https://Jiecub3.github.io/zh/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>jdk17下aop&amp;jackson原生链</title>
+      <link>https://Jiecub3.github.io/zh/posts/java/chain/jdk17%E4%B8%8Baopjackson%E5%8E%9F%E7%94%9F%E9%93%BE/</link>
+      <pubDate>Thu, 28 Aug 2025 20:01:23 +0800</pubDate>
+      <guid>https://Jiecub3.github.io/zh/posts/java/chain/jdk17%E4%B8%8Baopjackson%E5%8E%9F%E7%94%9F%E9%93%BE/</guid>
+      <description>链子2 前言：知道是jackson原型链的升级版，不想大费周章，我只关心模块检测的地方，结果写着写着还是有点占地方，所以单独放一篇文章。 及本文</description>
+    </item>
     <item>
       <title>高版本jdk Spring aop链子</title>
       <link>https://Jiecub3.github.io/zh/posts/java/chain/%E9%AB%98%E7%89%88%E6%9C%ACjdk-spring-aop%E9%93%BE%E5%AD%90/</link>
